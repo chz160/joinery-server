@@ -15,6 +15,8 @@ public class JoineryDbContext : DbContext
     public DbSet<TeamMember> TeamMembers { get; set; }
     public DbSet<Organization> Organizations { get; set; }
     public DbSet<OrganizationMember> OrganizationMembers { get; set; }
+    public DbSet<GitRepository> GitRepositories { get; set; }
+    public DbSet<GitQueryFile> GitQueryFiles { get; set; }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -131,6 +133,62 @@ public class JoineryDbContext : DbContext
             
             // Ensure unique combination of OrganizationId and UserId
             entity.HasIndex(e => new { e.OrganizationId, e.UserId }).IsUnique();
+        });
+        
+        // Configure GitRepository entity
+        modelBuilder.Entity<GitRepository>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.RepositoryUrl).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Branch).HasMaxLength(100);
+            entity.Property(e => e.AccessToken).HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.CreatedByUserId).IsRequired();
+            
+            // Relationship: GitRepository -> User (CreatedBy)
+            entity.HasOne(e => e.CreatedByUser)
+                  .WithMany()
+                  .HasForeignKey(e => e.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            
+            // Relationship: GitRepository -> Organization (optional)
+            entity.HasOne(e => e.Organization)
+                  .WithMany()
+                  .HasForeignKey(e => e.OrganizationId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            
+            // Relationship: GitRepository -> Team (optional)
+            entity.HasOne(e => e.Team)
+                  .WithMany()
+                  .HasForeignKey(e => e.TeamId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+        
+        // Configure GitQueryFile entity
+        modelBuilder.Entity<GitQueryFile>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.GitRepositoryId).IsRequired();
+            entity.Property(e => e.FilePath).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.FileName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.DatabaseType).HasMaxLength(50);
+            entity.Property(e => e.LastCommitAuthor).HasMaxLength(100);
+            entity.Property(e => e.Tags)
+                .HasConversion(
+                    v => string.Join(',', v ?? new List<string>()),
+                    v => v.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList()
+                );
+            
+            // Relationship: GitQueryFile -> GitRepository
+            entity.HasOne(e => e.GitRepository)
+                  .WithMany(r => r.QueryFiles)
+                  .HasForeignKey(e => e.GitRepositoryId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            
+            // Ensure unique combination of GitRepositoryId and FilePath
+            entity.HasIndex(e => new { e.GitRepositoryId, e.FilePath }).IsUnique();
         });
         
         // Seed data for development

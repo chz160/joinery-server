@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using JoineryServer.Data;
 using JoineryServer.Models;
+using JoineryServer.Services;
+using System.Security.Claims;
 
 namespace JoineryServer.Controllers;
 
@@ -12,29 +14,90 @@ namespace JoineryServer.Controllers;
 public class QueriesController : ControllerBase
 {
     private readonly JoineryDbContext _context;
+    private readonly IGitRepositoryService _gitService;
     private readonly ILogger<QueriesController> _logger;
 
-    public QueriesController(JoineryDbContext context, ILogger<QueriesController> logger)
+    public QueriesController(JoineryDbContext context, IGitRepositoryService gitService, ILogger<QueriesController> logger)
     {
         _context = context;
+        _gitService = gitService;
         _logger = logger;
     }
 
+    private int GetCurrentUserId()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        return userIdClaim != null ? int.Parse(userIdClaim.Value) : 0;
+    }
+
     /// <summary>
-    /// Get all database queries
+    /// Get all database queries (both traditional and Git-based)
     /// </summary>
     /// <returns>List of database queries</returns>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<DatabaseQuery>>> GetQueries()
+    public async Task<ActionResult<IEnumerable<object>>> GetQueries()
     {
-        _logger.LogInformation("Getting all database queries");
+        var currentUserId = GetCurrentUserId();
+        _logger.LogInformation("Getting all database queries for user {UserId}", currentUserId);
         
-        var queries = await _context.DatabaseQueries
+        // Get traditional database queries
+        var dbQueries = await _context.DatabaseQueries
             .Where(q => q.IsActive)
-            .OrderByDescending(q => q.UpdatedAt)
+            .Select(q => new
+            {
+                q.Id,
+                q.Name,
+                SqlQuery = q.SqlQuery,
+                q.Description,
+                q.CreatedBy,
+                q.CreatedAt,
+                q.UpdatedAt,
+                q.DatabaseType,
+                q.Tags,
+                Source = "Database",
+                RepositoryName = (string?)null,
+                FilePath = (string?)null,
+                LastCommitAuthor = (string?)null,
+                LastCommitAt = (DateTime?)null
+            })
             .ToListAsync();
 
-        return Ok(queries);
+        // Get Git-based queries from accessible repositories
+        var gitQueries = await _context.GitQueryFiles
+            .Where(gqf => gqf.IsActive && gqf.GitRepository.IsActive && (
+                // Organization-level repositories where user is a member
+                (gqf.GitRepository.OrganizationId != null && gqf.GitRepository.Organization!.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive)) ||
+                // Team-level repositories where user is a member  
+                (gqf.GitRepository.TeamId != null && gqf.GitRepository.Team!.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive)) ||
+                // Repositories created by the user
+                gqf.GitRepository.CreatedByUserId == currentUserId
+            ))
+            .Include(gqf => gqf.GitRepository)
+            .Select(gqf => new
+            {
+                Id = gqf.Id + 10000, // Offset to avoid ID conflicts with database queries
+                Name = gqf.FileName.Replace(".sql", "").Replace("_", " "),
+                SqlQuery = gqf.SqlContent,
+                Description = gqf.Description ?? $"Query from {gqf.GitRepository.Name}",
+                CreatedBy = gqf.LastCommitAuthor ?? "Unknown",
+                CreatedAt = gqf.LastCommitAt,
+                UpdatedAt = gqf.LastSyncAt,
+                DatabaseType = gqf.DatabaseType,
+                Tags = gqf.Tags,
+                Source = "Git",
+                RepositoryName = gqf.GitRepository.Name,
+                FilePath = gqf.FilePath,
+                LastCommitAuthor = gqf.LastCommitAuthor,
+                LastCommitAt = gqf.LastCommitAt
+            })
+            .ToListAsync();
+
+        // Combine both sources
+        var allQueries = dbQueries.Cast<object>().Concat(gitQueries.Cast<object>())
+            .OrderByDescending(q => ((dynamic)q).UpdatedAt)
+            .ToList();
+
+        return Ok(allQueries);
     }
 
     /// <summary>
@@ -43,10 +106,54 @@ public class QueriesController : ControllerBase
     /// <param name="id">Query ID</param>
     /// <returns>Database query</returns>
     [HttpGet("{id}")]
-    public async Task<ActionResult<DatabaseQuery>> GetQuery(int id)
+    public async Task<ActionResult<object>> GetQuery(int id)
     {
-        _logger.LogInformation("Getting database query with ID: {Id}", id);
+        var currentUserId = GetCurrentUserId();
+        _logger.LogInformation("Getting database query with ID: {Id} for user {UserId}", id, currentUserId);
 
+        // Check if it's a Git-based query (ID > 10000)
+        if (id > 10000)
+        {
+            var gitQueryId = id - 10000;
+            var gitQuery = await _context.GitQueryFiles
+                .Where(gqf => gqf.Id == gitQueryId && gqf.IsActive && gqf.GitRepository.IsActive && (
+                    // Organization-level repositories where user is a member
+                    (gqf.GitRepository.OrganizationId != null && gqf.GitRepository.Organization!.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive)) ||
+                    // Team-level repositories where user is a member  
+                    (gqf.GitRepository.TeamId != null && gqf.GitRepository.Team!.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive)) ||
+                    // Repositories created by the user
+                    gqf.GitRepository.CreatedByUserId == currentUserId
+                ))
+                .Include(gqf => gqf.GitRepository)
+                .Select(gqf => new
+                {
+                    Id = gqf.Id + 10000,
+                    Name = gqf.FileName.Replace(".sql", "").Replace("_", " "),
+                    SqlQuery = gqf.SqlContent,
+                    Description = gqf.Description ?? $"Query from {gqf.GitRepository.Name}",
+                    CreatedBy = gqf.LastCommitAuthor ?? "Unknown",
+                    CreatedAt = gqf.LastCommitAt,
+                    UpdatedAt = gqf.LastSyncAt,
+                    DatabaseType = gqf.DatabaseType,
+                    Tags = gqf.Tags,
+                    Source = "Git",
+                    RepositoryName = gqf.GitRepository.Name,
+                    FilePath = gqf.FilePath,
+                    LastCommitAuthor = gqf.LastCommitAuthor,
+                    LastCommitAt = gqf.LastCommitAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (gitQuery == null)
+            {
+                _logger.LogWarning("Git-based database query with ID {Id} not found", id);
+                return NotFound();
+            }
+
+            return Ok(gitQuery);
+        }
+
+        // Traditional database query
         var query = await _context.DatabaseQueries
             .FirstOrDefaultAsync(q => q.Id == id && q.IsActive);
 
@@ -56,33 +163,105 @@ public class QueriesController : ControllerBase
             return NotFound();
         }
 
-        return Ok(query);
+        var result = new
+        {
+            query.Id,
+            query.Name,
+            SqlQuery = query.SqlQuery,
+            query.Description,
+            query.CreatedBy,
+            query.CreatedAt,
+            query.UpdatedAt,
+            query.DatabaseType,
+            query.Tags,
+            Source = "Database",
+            RepositoryName = (string?)null,
+            FilePath = (string?)null,
+            LastCommitAuthor = (string?)null,
+            LastCommitAt = (DateTime?)null
+        };
+
+        return Ok(result);
     }
 
     /// <summary>
-    /// Search queries by name or tags
+    /// Search queries by name or tags (both traditional and Git-based)
     /// </summary>
     /// <param name="searchTerm">Search term</param>
     /// <returns>Filtered list of database queries</returns>
     [HttpGet("search")]
-    public async Task<ActionResult<IEnumerable<DatabaseQuery>>> SearchQueries([FromQuery] string searchTerm)
+    public async Task<ActionResult<IEnumerable<object>>> SearchQueries([FromQuery] string searchTerm)
     {
-        _logger.LogInformation("Searching database queries with term: {SearchTerm}", searchTerm);
+        var currentUserId = GetCurrentUserId();
+        _logger.LogInformation("Searching database queries with term: {SearchTerm} for user {UserId}", searchTerm, currentUserId);
 
         if (string.IsNullOrWhiteSpace(searchTerm))
         {
             return BadRequest("Search term cannot be empty");
         }
 
-        var queries = await _context.DatabaseQueries
+        // Search traditional database queries
+        var dbQueries = await _context.DatabaseQueries
             .Where(q => q.IsActive && 
                        (q.Name.Contains(searchTerm) || 
                         q.Description != null && q.Description.Contains(searchTerm) ||
                         q.Tags != null && q.Tags.Any(t => t.Contains(searchTerm))))
-            .OrderByDescending(q => q.UpdatedAt)
+            .Select(q => new
+            {
+                Id = q.Id,
+                Name = q.Name,
+                SqlQuery = q.SqlQuery,
+                Description = q.Description,
+                CreatedBy = q.CreatedBy,
+                CreatedAt = q.CreatedAt,
+                UpdatedAt = q.UpdatedAt,
+                DatabaseType = q.DatabaseType,
+                Tags = q.Tags,
+                Source = "Database",
+                RepositoryName = (string?)null,
+                FilePath = (string?)null
+            })
             .ToListAsync();
 
-        return Ok(queries);
+        // Search Git-based queries
+        var gitQueries = await _context.GitQueryFiles
+            .Where(gqf => gqf.IsActive && gqf.GitRepository.IsActive &&
+                         (gqf.FileName.Contains(searchTerm) ||
+                          gqf.Description != null && gqf.Description.Contains(searchTerm) ||
+                          gqf.Tags != null && gqf.Tags.Any(t => t.Contains(searchTerm)) ||
+                          gqf.SqlContent != null && gqf.SqlContent.Contains(searchTerm)) &&
+                         (
+                             // Organization-level repositories where user is a member
+                             (gqf.GitRepository.OrganizationId != null && gqf.GitRepository.Organization!.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive)) ||
+                             // Team-level repositories where user is a member  
+                             (gqf.GitRepository.TeamId != null && gqf.GitRepository.Team!.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive)) ||
+                             // Repositories created by the user
+                             gqf.GitRepository.CreatedByUserId == currentUserId
+                         ))
+            .Include(gqf => gqf.GitRepository)
+            .Select(gqf => new
+            {
+                Id = gqf.Id + 10000,
+                Name = gqf.FileName.Replace(".sql", "").Replace("_", " "),
+                SqlQuery = gqf.SqlContent,
+                Description = gqf.Description ?? $"Query from {gqf.GitRepository.Name}",
+                CreatedBy = gqf.LastCommitAuthor ?? "Unknown",
+                CreatedAt = gqf.LastCommitAt,
+                UpdatedAt = gqf.LastSyncAt,
+                DatabaseType = gqf.DatabaseType,
+                Tags = gqf.Tags,
+                Source = "Git",
+                RepositoryName = gqf.GitRepository.Name,
+                FilePath = gqf.FilePath
+            })
+            .ToListAsync();
+
+        // Combine both sources
+        var allQueries = dbQueries.Cast<object>().Concat(gitQueries.Cast<object>())
+            .OrderByDescending(q => ((dynamic)q).UpdatedAt)
+            .ToList();
+
+        return Ok(allQueries);
     }
 
     /// <summary>
@@ -119,5 +298,146 @@ public class QueriesController : ControllerBase
             .ToListAsync();
 
         return Ok(queries);
+    }
+
+    /// <summary>
+    /// Get queries from a specific Git repository folder
+    /// </summary>
+    /// <param name="repositoryId">Git repository ID</param>
+    /// <param name="folderPath">Folder path (optional, defaults to root)</param>
+    /// <returns>List of queries in the specified folder</returns>
+    [HttpGet("from-git/{repositoryId}/folder")]
+    public async Task<ActionResult<IEnumerable<object>>> GetQueriesFromGitFolder(int repositoryId, [FromQuery] string folderPath = "")
+    {
+        var currentUserId = GetCurrentUserId();
+        _logger.LogInformation("Getting queries from Git repository {RepositoryId} folder '{FolderPath}' for user {UserId}", 
+            repositoryId, folderPath, currentUserId);
+
+        var repository = await _context.GitRepositories
+            .FirstOrDefaultAsync(r => r.Id == repositoryId && r.IsActive);
+
+        if (repository == null)
+        {
+            return NotFound("Repository not found");
+        }
+
+        // Check if user has access to this repository
+        var hasAccess = repository.CreatedByUserId == currentUserId ||
+                       (repository.OrganizationId != null && await _context.OrganizationMembers
+                           .AnyAsync(om => om.OrganizationId == repository.OrganizationId && om.UserId == currentUserId && om.IsActive)) ||
+                       (repository.TeamId != null && await _context.TeamMembers
+                           .AnyAsync(tm => tm.TeamId == repository.TeamId && tm.UserId == currentUserId && tm.IsActive));
+
+        if (!hasAccess)
+        {
+            return Forbid();
+        }
+
+        IQueryable<GitQueryFile> query = _context.GitQueryFiles
+            .Where(gqf => gqf.GitRepositoryId == repositoryId && gqf.IsActive)
+            .Include(gqf => gqf.GitRepository);
+
+        // Filter by folder path
+        if (!string.IsNullOrEmpty(folderPath))
+        {
+            var normalizedFolderPath = folderPath.Replace("\\", "/").TrimEnd('/');
+            query = query.Where(gqf => gqf.FilePath.StartsWith(normalizedFolderPath + "/"));
+        }
+        else
+        {
+            // Root folder only (no subfolders)
+            query = query.Where(gqf => !gqf.FilePath.Contains("/"));
+        }
+
+        var gitQueries = await query
+            .Select(gqf => new
+            {
+                Id = gqf.Id + 10000,
+                Name = gqf.FileName.Replace(".sql", "").Replace("_", " "),
+                SqlQuery = gqf.SqlContent,
+                Description = gqf.Description ?? $"Query from {gqf.GitRepository.Name}",
+                CreatedBy = gqf.LastCommitAuthor ?? "Unknown",
+                CreatedAt = gqf.LastCommitAt,
+                UpdatedAt = gqf.LastSyncAt,
+                DatabaseType = gqf.DatabaseType,
+                Tags = gqf.Tags,
+                Source = "Git",
+                RepositoryName = gqf.GitRepository.Name,
+                FilePath = gqf.FilePath,
+                LastCommitAuthor = gqf.LastCommitAuthor,
+                LastCommitAt = gqf.LastCommitAt
+            })
+            .OrderBy(gq => gq.FilePath)
+            .ToListAsync();
+
+        return Ok(gitQueries);
+    }
+
+    /// <summary>
+    /// Get file history for a Git-based query
+    /// </summary>
+    /// <param name="repositoryId">Git repository ID</param>
+    /// <param name="filePath">File path within the repository</param>
+    /// <returns>Basic change history information</returns>
+    [HttpGet("from-git/{repositoryId}/history")]
+    public async Task<ActionResult<object>> GetQueryFileHistory(int repositoryId, [FromQuery] string filePath)
+    {
+        var currentUserId = GetCurrentUserId();
+        _logger.LogInformation("Getting history for file '{FilePath}' in repository {RepositoryId} for user {UserId}", 
+            filePath, repositoryId, currentUserId);
+
+        if (string.IsNullOrEmpty(filePath))
+        {
+            return BadRequest("File path is required");
+        }
+
+        var repository = await _context.GitRepositories
+            .FirstOrDefaultAsync(r => r.Id == repositoryId && r.IsActive);
+
+        if (repository == null)
+        {
+            return NotFound("Repository not found");
+        }
+
+        // Check access
+        var hasAccess = repository.CreatedByUserId == currentUserId ||
+                       (repository.OrganizationId != null && await _context.OrganizationMembers
+                           .AnyAsync(om => om.OrganizationId == repository.OrganizationId && om.UserId == currentUserId && om.IsActive)) ||
+                       (repository.TeamId != null && await _context.TeamMembers
+                           .AnyAsync(tm => tm.TeamId == repository.TeamId && tm.UserId == currentUserId && tm.IsActive));
+
+        if (!hasAccess)
+        {
+            return Forbid();
+        }
+
+        var queryFile = await _context.GitQueryFiles
+            .Include(gqf => gqf.GitRepository)
+            .FirstOrDefaultAsync(gqf => gqf.GitRepositoryId == repositoryId && gqf.FilePath == filePath && gqf.IsActive);
+
+        if (queryFile == null)
+        {
+            return NotFound("Query file not found");
+        }
+
+        var history = new
+        {
+            RepositoryName = queryFile.GitRepository.Name,
+            RepositoryUrl = queryFile.GitRepository.RepositoryUrl,
+            FilePath = queryFile.FilePath,
+            FileName = queryFile.FileName,
+            LastCommit = new
+            {
+                Sha = queryFile.LastCommitSha,
+                Author = queryFile.LastCommitAuthor,
+                Date = queryFile.LastCommitAt,
+                Message = "Latest commit" // We could enhance this to get actual commit messages
+            },
+            LastSyncAt = queryFile.LastSyncAt,
+            // Note: For full commit history, we'd need to make additional API calls to the Git provider
+            Note = "For complete commit history, visit the repository directly"
+        };
+
+        return Ok(history);
     }
 }
