@@ -30,4 +30,8 @@ public class User
     public DateTime LastLoginAt { get; set; } = DateTime.UtcNow;
     
     public bool IsActive { get; set; } = true;
+    
+    // Navigation properties
+    public ICollection<Team> CreatedTeams { get; set; } = new List<Team>();
+    public ICollection<TeamMember> TeamMemberships { get; set; } = new List<TeamMember>();
 }

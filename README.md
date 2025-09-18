@@ -6,6 +6,7 @@ The server-side portion of Joinery - a platform for sharing and managing databas
 
 - **Authentication**: GitHub OAuth and Microsoft Entra ID integration
 - **Read-only API**: Access to shared database queries
+- **Team Management**: Create teams, add members, manage roles with administrator permissions
 - **JWT Token-based Security**: Secure API access after authentication
 - **RESTful API**: Clean, documented endpoints
 - **In-Memory Database**: Quick setup for MVP with Entity Framework Core
@@ -96,6 +97,17 @@ The application will start at:
 - `GET /api/queries/search?searchTerm={term}` - Search queries by name/description/tags
 - `GET /api/queries/by-database/{databaseType}` - Filter by database type
 - `GET /api/queries/by-tag/{tag}` - Filter by tag
+
+### Teams (Authenticated)
+
+- `GET /api/teams` - Get all teams for current user
+- `POST /api/teams` - Create a new team
+- `GET /api/teams/{id}` - Get team details with members
+- `PUT /api/teams/{id}` - Update team (admins only)
+- `DELETE /api/teams/{id}` - Delete team (creator only)
+- `POST /api/teams/{id}/members` - Add member to team (admins only)
+- `DELETE /api/teams/{id}/members/{userId}` - Remove member from team (admins only, or self)
+- `PUT /api/teams/{id}/members/{userId}/role` - Update member role (admins only)
 
 ### Health Checks
 
