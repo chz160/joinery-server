@@ -15,12 +15,14 @@ public class GitRepositoriesController : ControllerBase
 {
     private readonly JoineryDbContext _context;
     private readonly IGitRepositoryService _gitService;
+    private readonly ITeamPermissionService _permissionService;
     private readonly ILogger<GitRepositoriesController> _logger;
 
-    public GitRepositoriesController(JoineryDbContext context, IGitRepositoryService gitService, ILogger<GitRepositoriesController> logger)
+    public GitRepositoriesController(JoineryDbContext context, IGitRepositoryService gitService, ITeamPermissionService permissionService, ILogger<GitRepositoriesController> logger)
     {
         _context = context;
         _gitService = gitService;
+        _permissionService = permissionService;
         _logger = logger;
     }
 
@@ -197,15 +199,12 @@ public class GitRepositoriesController : ControllerBase
 
         if (request.TeamId.HasValue)
         {
-            var hasTeamPermission = await _context.TeamMembers
-                .AnyAsync(tm => tm.TeamId == request.TeamId && 
-                               tm.UserId == currentUserId && 
-                               tm.IsActive && 
-                               tm.Role == TeamRole.Administrator);
+            // Check if user has manage folders permission
+            var hasPermission = await _permissionService.HasPermissionAsync(currentUserId, request.TeamId, TeamPermission.ManageFolders);
             
-            if (!hasTeamPermission)
+            if (!hasPermission)
             {
-                return Forbid("You must be a team administrator to create team-level repositories");
+                return Forbid("You must have folder management permission to create team-level repositories");
             }
         }
 
@@ -332,12 +331,11 @@ public class GitRepositoriesController : ControllerBase
             return NotFound();
         }
 
-        // Check access
+        // Check access - at minimum need read permission
         var hasAccess = repository.CreatedByUserId == currentUserId ||
                        (repository.OrganizationId != null && await _context.OrganizationMembers
                            .AnyAsync(om => om.OrganizationId == repository.OrganizationId && om.UserId == currentUserId && om.IsActive)) ||
-                       (repository.TeamId != null && await _context.TeamMembers
-                           .AnyAsync(tm => tm.TeamId == repository.TeamId && tm.UserId == currentUserId && tm.IsActive));
+                       (repository.TeamId != null && await _permissionService.HasPermissionAsync(currentUserId, repository.TeamId, TeamPermission.ReadQueries));
 
         if (!hasAccess)
         {

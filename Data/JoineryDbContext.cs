@@ -80,6 +80,11 @@ public class JoineryDbContext : DbContext
             entity.Property(e => e.UserId).IsRequired();
             entity.Property(e => e.Role).IsRequired();
             
+            // Configure Permissions as nullable enum
+            entity.Property(e => e.Permissions)
+                  .HasConversion<int?>()
+                  .IsRequired(false);
+            
             // Relationship: TeamMember -> Team
             entity.HasOne(e => e.Team)
                   .WithMany(t => t.TeamMembers)

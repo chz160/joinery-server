@@ -24,6 +24,9 @@ builder.Services.AddHttpClient();
 // Add Git repository service
 builder.Services.AddScoped<IGitRepositoryService, GitRepositoryService>();
 
+// Add team permission service
+builder.Services.AddScoped<ITeamPermissionService, TeamPermissionService>();
+
 // Configure authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using JoineryServer.Data;
 using JoineryServer.Models;
 using JoineryServer.Services;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 
 namespace JoineryServer.Controllers;
@@ -15,12 +16,14 @@ public class QueriesController : ControllerBase
 {
     private readonly JoineryDbContext _context;
     private readonly IGitRepositoryService _gitService;
+    private readonly ITeamPermissionService _permissionService;
     private readonly ILogger<QueriesController> _logger;
 
-    public QueriesController(JoineryDbContext context, IGitRepositoryService gitService, ILogger<QueriesController> logger)
+    public QueriesController(JoineryDbContext context, IGitRepositoryService gitService, ITeamPermissionService permissionService, ILogger<QueriesController> logger)
     {
         _context = context;
         _gitService = gitService;
+        _permissionService = permissionService;
         _logger = logger;
     }
 
@@ -440,4 +443,89 @@ public class QueriesController : ControllerBase
 
         return Ok(history);
     }
+    
+    /// <summary>
+    /// Create a new database query (requires create permission for team queries)
+    /// </summary>
+    /// <param name="request">Query creation request</param>
+    /// <returns>Created query</returns>
+    [HttpPost]
+    public async Task<ActionResult<object>> CreateQuery([FromBody] CreateQueryRequest request)
+    {
+        var currentUserId = GetCurrentUserId();
+        _logger.LogInformation("User {UserId} creating query {Name}", currentUserId, request.Name);
+
+        // If associated with a team, check permissions
+        if (request.TeamId.HasValue)
+        {
+            var hasPermission = await _permissionService.HasPermissionAsync(currentUserId, request.TeamId, TeamPermission.CreateQueries);
+            if (!hasPermission)
+            {
+                return Forbid("You don't have permission to create queries in this team");
+            }
+        }
+
+        var currentUser = await _context.Users.FindAsync(currentUserId);
+        if (currentUser == null)
+        {
+            return BadRequest("User not found");
+        }
+
+        var query = new DatabaseQuery
+        {
+            Name = request.Name,
+            SqlQuery = request.SqlQuery,
+            Description = request.Description,
+            CreatedBy = currentUser.Username,
+            DatabaseType = request.DatabaseType,
+            Tags = request.Tags,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            IsActive = true
+        };
+
+        _context.DatabaseQueries.Add(query);
+        await _context.SaveChangesAsync();
+
+        var result = new
+        {
+            query.Id,
+            query.Name,
+            query.SqlQuery,
+            query.Description,
+            query.CreatedBy,
+            query.CreatedAt,
+            query.UpdatedAt,
+            query.DatabaseType,
+            query.Tags
+        };
+
+        return CreatedAtAction(nameof(GetQuery), new { id = query.Id }, result);
+    }
+}
+
+/// <summary>
+/// Request DTO for creating queries
+/// </summary>
+public class CreateQueryRequest
+{
+    [Required]
+    [MaxLength(200)]
+    public string Name { get; set; } = string.Empty;
+    
+    [Required]
+    public string SqlQuery { get; set; } = string.Empty;
+    
+    [MaxLength(1000)]
+    public string? Description { get; set; }
+    
+    [MaxLength(50)]
+    public string? DatabaseType { get; set; }
+    
+    public List<string>? Tags { get; set; }
+    
+    /// <summary>
+    /// Optional team ID if this query is associated with a team
+    /// </summary>
+    public int? TeamId { get; set; }
 }
