@@ -6,6 +6,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using JoineryServer.Data;
+using JoineryServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +17,12 @@ builder.Services.AddDbContext<JoineryDbContext>(options =>
     options.UseInMemoryDatabase("JoineryDatabase"));
 
 builder.Services.AddControllers();
+
+// Add HTTP client for Git repository service
+builder.Services.AddHttpClient();
+
+// Add Git repository service
+builder.Services.AddScoped<IGitRepositoryService, GitRepositoryService>();
 
 // Configure authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
