@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using JoineryServer.Data;
 using JoineryServer.Models;
 using System.Security.Claims;
+using System.ComponentModel.DataAnnotations;
 
 namespace JoineryServer.Controllers;
 
@@ -571,15 +572,27 @@ public class TeamsController : ControllerBase
 // Request DTOs
 public class CreateTeamRequest
 {
+    [Required]
+    [MaxLength(100)]
     public string Name { get; set; } = string.Empty;
+    
+    [MaxLength(500)]
     public string? Description { get; set; }
+    
+    [Required]
     public int OrganizationId { get; set; }
 }
 
 public class UpdateTeamRequest
 {
+    [Required]
+    [MaxLength(100)]
     public string Name { get; set; } = string.Empty;
+    
+    [MaxLength(500)]
     public string? Description { get; set; }
+    
+    [Required]
     public int OrganizationId { get; set; }
 }
 
