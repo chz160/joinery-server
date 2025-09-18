@@ -55,6 +55,7 @@ public class JoineryDbContext : DbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Description).HasMaxLength(500);
             entity.Property(e => e.CreatedByUserId).IsRequired();
+            entity.Property(e => e.OrganizationId).IsRequired();
             
             // Relationship: Team -> User (CreatedBy)
             entity.HasOne(e => e.CreatedByUser)
@@ -62,11 +63,11 @@ public class JoineryDbContext : DbContext
                   .HasForeignKey(e => e.CreatedByUserId)
                   .OnDelete(DeleteBehavior.Restrict);
             
-            // Relationship: Team -> Organization (optional)
+            // Relationship: Team -> Organization (required)
             entity.HasOne(e => e.Organization)
                   .WithMany(o => o.Teams)
                   .HasForeignKey(e => e.OrganizationId)
-                  .OnDelete(DeleteBehavior.SetNull);
+                  .OnDelete(DeleteBehavior.Restrict);
         });
         
         // Configure TeamMember entity

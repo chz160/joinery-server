@@ -63,11 +63,11 @@ public class TeamsController : ControllerBase
                     t.CreatedByUser.Username,
                     t.CreatedByUser.Email
                 },
-                Organization = t.Organization != null ? new
+                Organization = new
                 {
                     t.Organization.Id,
                     t.Organization.Name
-                } : null,
+                },
                 MemberCount = t.TeamMembers.Count(tm => tm.IsActive),
                 UserRole = t.CreatedByUserId == currentUserId ? TeamRole.Administrator :
                           t.TeamMembers.Where(tm => tm.UserId == currentUserId && tm.IsActive)
@@ -127,11 +127,11 @@ public class TeamsController : ControllerBase
                 team.CreatedByUser.Username,
                 team.CreatedByUser.Email
             },
-            Organization = team.Organization != null ? new
+            Organization = new
             {
                 team.Organization.Id,
                 team.Organization.Name
-            } : null,
+            },
             Members = team.TeamMembers.Select(tm => new
             {
                 tm.Id,
@@ -164,26 +164,23 @@ public class TeamsController : ControllerBase
         var currentUserId = GetCurrentUserId();
         _logger.LogInformation("User {UserId} creating team: {TeamName}", currentUserId, request.Name);
 
-        // If OrganizationId is provided, validate that user has access to the organization
-        if (request.OrganizationId.HasValue)
+        // Validate that user has access to the organization (now required)
+        var organization = await _context.Organizations
+            .Where(o => o.Id == request.OrganizationId && o.IsActive)
+            .Include(o => o.OrganizationMembers.Where(om => om.IsActive))
+            .FirstOrDefaultAsync();
+
+        if (organization == null)
         {
-            var organization = await _context.Organizations
-                .Where(o => o.Id == request.OrganizationId.Value && o.IsActive)
-                .Include(o => o.OrganizationMembers.Where(om => om.IsActive))
-                .FirstOrDefaultAsync();
+            return BadRequest("Organization not found");
+        }
 
-            if (organization == null)
-            {
-                return BadRequest("Organization not found");
-            }
+        var isOrgCreator = organization.CreatedByUserId == currentUserId;
+        var isOrgAdmin = organization.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive && om.Role == OrganizationRole.Administrator);
 
-            var isOrgCreator = organization.CreatedByUserId == currentUserId;
-            var isOrgAdmin = organization.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive && om.Role == OrganizationRole.Administrator);
-
-            if (!isOrgCreator && !isOrgAdmin)
-            {
-                return Forbid("You must be an administrator of the organization to create teams within it");
-            }
+        if (!isOrgCreator && !isOrgAdmin)
+        {
+            return Forbid("You must be an administrator of the organization to create teams within it");
         }
 
         var team = new Team
@@ -235,11 +232,11 @@ public class TeamsController : ControllerBase
                 createdTeam.CreatedByUser.Username,
                 createdTeam.CreatedByUser.Email
             },
-            Organization = createdTeam.Organization != null ? new
+            Organization = new
             {
                 createdTeam.Organization.Id,
                 createdTeam.Organization.Name
-            } : null,
+            },
             Members = createdTeam.TeamMembers.Select(tm => new
             {
                 tm.Id,
@@ -291,28 +288,25 @@ public class TeamsController : ControllerBase
             return Forbid();
         }
 
-        // If OrganizationId is being changed, validate access to the new organization
+        // Validate access to the organization (now required)
         if (request.OrganizationId != team.OrganizationId)
         {
-            if (request.OrganizationId.HasValue)
+            var organization = await _context.Organizations
+                .Where(o => o.Id == request.OrganizationId && o.IsActive)
+                .Include(o => o.OrganizationMembers.Where(om => om.IsActive))
+                .FirstOrDefaultAsync();
+
+            if (organization == null)
             {
-                var organization = await _context.Organizations
-                    .Where(o => o.Id == request.OrganizationId.Value && o.IsActive)
-                    .Include(o => o.OrganizationMembers.Where(om => om.IsActive))
-                    .FirstOrDefaultAsync();
+                return BadRequest("Organization not found");
+            }
 
-                if (organization == null)
-                {
-                    return BadRequest("Organization not found");
-                }
+            var isOrgCreator = organization.CreatedByUserId == currentUserId;
+            var isOrgAdmin = organization.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive && om.Role == OrganizationRole.Administrator);
 
-                var isOrgCreator = organization.CreatedByUserId == currentUserId;
-                var isOrgAdmin = organization.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive && om.Role == OrganizationRole.Administrator);
-
-                if (!isOrgCreator && !isOrgAdmin)
-                {
-                    return Forbid("You must be an administrator of the organization to move teams into it");
-                }
+            if (!isOrgCreator && !isOrgAdmin)
+            {
+                return Forbid("You must be an administrator of the organization to move teams into it");
             }
         }
 
@@ -579,14 +573,14 @@ public class CreateTeamRequest
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public int? OrganizationId { get; set; }
+    public int OrganizationId { get; set; }
 }
 
 public class UpdateTeamRequest
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
-    public int? OrganizationId { get; set; }
+    public int OrganizationId { get; set; }
 }
 
 public class AddTeamMemberRequest
