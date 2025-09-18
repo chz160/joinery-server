@@ -137,6 +137,8 @@ public class TeamsController : ControllerBase
             {
                 tm.Id,
                 tm.Role,
+                tm.Permissions,
+                EffectivePermissions = tm.GetEffectivePermissions(),
                 tm.JoinedAt,
                 User = new
                 {
@@ -418,6 +420,7 @@ public class TeamsController : ControllerBase
             TeamId = id,
             UserId = request.UserId,
             Role = request.Role,
+            Permissions = request.Permissions,
             JoinedAt = DateTime.UtcNow,
             IsActive = true
         };
@@ -435,6 +438,8 @@ public class TeamsController : ControllerBase
         {
             createdMember.Id,
             createdMember.Role,
+            createdMember.Permissions,
+            EffectivePermissions = createdMember.GetEffectivePermissions(),
             createdMember.JoinedAt,
             User = new
             {
@@ -555,6 +560,82 @@ public class TeamsController : ControllerBase
         {
             updatedMember.Id,
             updatedMember.Role,
+            updatedMember.Permissions,
+            EffectivePermissions = updatedMember.GetEffectivePermissions(),
+            updatedMember.JoinedAt,
+            User = new
+            {
+                updatedMember.User.Id,
+                updatedMember.User.Username,
+                updatedMember.User.Email,
+                updatedMember.User.FullName
+            }
+        };
+
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Update a team member's permissions
+    /// </summary>
+    /// <param name="id">Team ID</param>
+    /// <param name="userId">User ID</param>
+    /// <param name="request">Update permissions request</param>
+    /// <returns>Updated team member</returns>
+    [HttpPut("{id}/members/{userId}/permissions")]
+    public async Task<ActionResult<object>> UpdateMemberPermissions(int id, int userId, [FromBody] UpdateMemberPermissionsRequest request)
+    {
+        var currentUserId = GetCurrentUserId();
+        _logger.LogInformation("User {UserId} updating permissions for member {MemberId} in team {TeamId}", currentUserId, userId, id);
+
+        var team = await _context.Teams
+            .Where(t => t.Id == id && t.IsActive)
+            .Include(t => t.TeamMembers.Where(tm => tm.IsActive))
+            .FirstOrDefaultAsync();
+
+        if (team == null)
+        {
+            return NotFound("Team not found");
+        }
+
+        // Check if current user is administrator
+        var isCreator = team.CreatedByUserId == currentUserId;
+        var isAdmin = team.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive && tm.Role == TeamRole.Administrator);
+        
+        if (!isCreator && !isAdmin)
+        {
+            return Forbid();
+        }
+
+        var membership = await _context.TeamMembers
+            .FirstOrDefaultAsync(tm => tm.TeamId == id && tm.UserId == userId && tm.IsActive);
+
+        if (membership == null)
+        {
+            return BadRequest("User is not a member of this team");
+        }
+
+        // Prevent changing permissions of the team creator
+        if (team.CreatedByUserId == userId)
+        {
+            return BadRequest("Cannot change permissions of team creator");
+        }
+
+        membership.Permissions = request.Permissions;
+        await _context.SaveChangesAsync();
+
+        // Load updated membership with user details
+        var updatedMember = await _context.TeamMembers
+            .Where(tm => tm.Id == membership.Id)
+            .Include(tm => tm.User)
+            .FirstAsync();
+
+        var result = new
+        {
+            updatedMember.Id,
+            updatedMember.Role,
+            updatedMember.Permissions,
+            EffectivePermissions = updatedMember.GetEffectivePermissions(),
             updatedMember.JoinedAt,
             User = new
             {
@@ -600,9 +681,22 @@ public class AddTeamMemberRequest
 {
     public int UserId { get; set; }
     public TeamRole Role { get; set; } = TeamRole.Member;
+    
+    /// <summary>
+    /// Optional specific permissions. If not provided, defaults to permissions based on Role
+    /// </summary>
+    public TeamPermission? Permissions { get; set; }
 }
 
 public class UpdateMemberRoleRequest
 {
     public TeamRole Role { get; set; }
+}
+
+public class UpdateMemberPermissionsRequest
+{
+    /// <summary>
+    /// Specific permissions to grant to the team member
+    /// </summary>
+    public TeamPermission Permissions { get; set; }
 }
