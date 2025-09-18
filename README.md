@@ -109,6 +109,17 @@ The application will start at:
 - `DELETE /api/teams/{id}/members/{userId}` - Remove member from team (admins only, or self)
 - `PUT /api/teams/{id}/members/{userId}/role` - Update member role (admins only)
 
+### Organizations (Authenticated)
+
+- `GET /api/organizations` - Get all organizations for current user
+- `POST /api/organizations` - Create a new organization
+- `GET /api/organizations/{id}` - Get organization details with members and teams
+- `PUT /api/organizations/{id}` - Update organization (admins only)
+- `DELETE /api/organizations/{id}` - Delete organization (creator only)
+- `POST /api/organizations/{id}/members` - Add member to organization (admins only)
+- `DELETE /api/organizations/{id}/members/{userId}` - Remove member from organization (admins only, or self)
+- `PUT /api/organizations/{id}/members/{userId}/role` - Update member role (admins only)
+
 ### Health Checks
 
 - `GET /api/health` - Service health check
