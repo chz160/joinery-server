@@ -16,7 +16,8 @@ public class Team
     [Required]
     public int CreatedByUserId { get; set; }
     
-    public int? OrganizationId { get; set; }
+    [Required]
+    public int OrganizationId { get; set; }
     
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     
@@ -26,6 +27,6 @@ public class Team
     
     // Navigation properties
     public User CreatedByUser { get; set; } = null!;
-    public Organization? Organization { get; set; }
+    public Organization Organization { get; set; } = null!;
     public ICollection<TeamMember> TeamMembers { get; set; } = new List<TeamMember>();
 }
