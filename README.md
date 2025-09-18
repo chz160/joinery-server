@@ -104,7 +104,7 @@ The application will start at:
 
 ## Usage
 
-1. **Access Swagger UI**: Navigate to the application root (`https://localhost:7050`) for interactive API documentation
+1. **Access Swagger UI**: Navigate to `/swagger` endpoint (e.g., `https://localhost:7050/swagger`) for interactive API documentation
 
 2. **Authenticate**: Use one of the login endpoints to authenticate via GitHub or Microsoft
 
