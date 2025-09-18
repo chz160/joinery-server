@@ -34,4 +34,6 @@ public class User
     // Navigation properties
     public ICollection<Team> CreatedTeams { get; set; } = new List<Team>();
     public ICollection<TeamMember> TeamMemberships { get; set; } = new List<TeamMember>();
+    public ICollection<Organization> CreatedOrganizations { get; set; } = new List<Organization>();
+    public ICollection<OrganizationMember> OrganizationMemberships { get; set; } = new List<OrganizationMember>();
 }

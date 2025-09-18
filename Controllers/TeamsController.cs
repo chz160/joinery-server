@@ -44,9 +44,11 @@ public class TeamsController : ControllerBase
         var teams = await _context.Teams
             .Where(t => t.IsActive && (
                 t.CreatedByUserId == currentUserId || 
-                t.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive)
+                t.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive) ||
+                t.Organization.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive)
             ))
             .Include(t => t.CreatedByUser)
+            .Include(t => t.Organization)
             .Include(t => t.TeamMembers.Where(tm => tm.IsActive))
             .ThenInclude(tm => tm.User)
             .Select(t => new
@@ -61,6 +63,11 @@ public class TeamsController : ControllerBase
                     t.CreatedByUser.Id,
                     t.CreatedByUser.Username,
                     t.CreatedByUser.Email
+                },
+                Organization = new
+                {
+                    t.Organization.Id,
+                    t.Organization.Name
                 },
                 MemberCount = t.TeamMembers.Count(tm => tm.IsActive),
                 UserRole = t.CreatedByUserId == currentUserId ? TeamRole.Administrator :
@@ -87,6 +94,7 @@ public class TeamsController : ControllerBase
         var team = await _context.Teams
             .Where(t => t.Id == id && t.IsActive)
             .Include(t => t.CreatedByUser)
+            .Include(t => t.Organization)
             .Include(t => t.TeamMembers.Where(tm => tm.IsActive))
             .ThenInclude(tm => tm.User)
             .FirstOrDefaultAsync();
@@ -97,11 +105,15 @@ public class TeamsController : ControllerBase
             return NotFound();
         }
 
-        // Check if user has access to this team
+        // Check if user has access to this team (team member or organization member)
         var isCreator = team.CreatedByUserId == currentUserId;
         var isMember = team.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive);
         
-        if (!isCreator && !isMember)
+        // Also check if user is a member of the organization that owns this team
+        var isOrgMember = await _context.OrganizationMembers
+            .AnyAsync(om => om.OrganizationId == team.OrganizationId && om.UserId == currentUserId && om.IsActive);
+        
+        if (!isCreator && !isMember && !isOrgMember)
         {
             _logger.LogWarning("User {UserId} attempted to access team {TeamId} without permission", currentUserId, id);
             return Forbid();
@@ -119,6 +131,11 @@ public class TeamsController : ControllerBase
                 team.CreatedByUser.Id,
                 team.CreatedByUser.Username,
                 team.CreatedByUser.Email
+            },
+            Organization = new
+            {
+                team.Organization.Id,
+                team.Organization.Name
             },
             Members = team.TeamMembers.Select(tm => new
             {
@@ -150,13 +167,34 @@ public class TeamsController : ControllerBase
     public async Task<ActionResult<object>> CreateTeam([FromBody] CreateTeamRequest request)
     {
         var currentUserId = GetCurrentUserId();
-        _logger.LogInformation("User {UserId} creating team: {TeamName}", currentUserId, request.Name);
+        _logger.LogInformation("User {UserId} creating team: {TeamName} in organization {OrganizationId}", currentUserId, request.Name, request.OrganizationId);
+
+        // Check if the organization exists and user has permission to create teams in it
+        var organization = await _context.Organizations
+            .Where(o => o.Id == request.OrganizationId && o.IsActive)
+            .Include(o => o.OrganizationMembers.Where(om => om.IsActive))
+            .FirstOrDefaultAsync();
+
+        if (organization == null)
+        {
+            return BadRequest("Organization not found");
+        }
+
+        // Check if current user is a member or administrator of the organization
+        var isOrgCreator = organization.CreatedByUserId == currentUserId;
+        var isOrgMember = organization.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive);
+        
+        if (!isOrgCreator && !isOrgMember)
+        {
+            return Forbid("You must be a member of the organization to create teams");
+        }
 
         var team = new Team
         {
             Name = request.Name,
             Description = request.Description,
             CreatedByUserId = currentUserId,
+            OrganizationId = request.OrganizationId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
             IsActive = true
@@ -182,6 +220,7 @@ public class TeamsController : ControllerBase
         var createdTeam = await _context.Teams
             .Where(t => t.Id == team.Id)
             .Include(t => t.CreatedByUser)
+            .Include(t => t.Organization)
             .Include(t => t.TeamMembers.Where(tm => tm.IsActive))
             .ThenInclude(tm => tm.User)
             .FirstAsync();
@@ -198,6 +237,11 @@ public class TeamsController : ControllerBase
                 createdTeam.CreatedByUser.Id,
                 createdTeam.CreatedByUser.Username,
                 createdTeam.CreatedByUser.Email
+            },
+            Organization = new
+            {
+                createdTeam.Organization.Id,
+                createdTeam.Organization.Name
             },
             Members = createdTeam.TeamMembers.Select(tm => new
             {
@@ -512,6 +556,7 @@ public class CreateTeamRequest
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public int OrganizationId { get; set; }
 }
 
 public class UpdateTeamRequest

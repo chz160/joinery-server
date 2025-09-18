@@ -13,6 +13,8 @@ public class JoineryDbContext : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<Team> Teams { get; set; }
     public DbSet<TeamMember> TeamMembers { get; set; }
+    public DbSet<Organization> Organizations { get; set; }
+    public DbSet<OrganizationMember> OrganizationMembers { get; set; }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,12 +55,19 @@ public class JoineryDbContext : DbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Description).HasMaxLength(500);
             entity.Property(e => e.CreatedByUserId).IsRequired();
+            entity.Property(e => e.OrganizationId).IsRequired();
             
             // Relationship: Team -> User (CreatedBy)
             entity.HasOne(e => e.CreatedByUser)
                   .WithMany(u => u.CreatedTeams)
                   .HasForeignKey(e => e.CreatedByUserId)
                   .OnDelete(DeleteBehavior.Restrict);
+            
+            // Relationship: Team -> Organization
+            entity.HasOne(e => e.Organization)
+                  .WithMany(o => o.Teams)
+                  .HasForeignKey(e => e.OrganizationId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
         
         // Configure TeamMember entity
@@ -83,6 +92,45 @@ public class JoineryDbContext : DbContext
             
             // Ensure unique combination of TeamId and UserId
             entity.HasIndex(e => new { e.TeamId, e.UserId }).IsUnique();
+        });
+        
+        // Configure Organization entity
+        modelBuilder.Entity<Organization>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.CreatedByUserId).IsRequired();
+            
+            // Relationship: Organization -> User (CreatedBy)
+            entity.HasOne(e => e.CreatedByUser)
+                  .WithMany(u => u.CreatedOrganizations)
+                  .HasForeignKey(e => e.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+        
+        // Configure OrganizationMember entity
+        modelBuilder.Entity<OrganizationMember>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.Role).IsRequired();
+            
+            // Relationship: OrganizationMember -> Organization
+            entity.HasOne(e => e.Organization)
+                  .WithMany(o => o.OrganizationMembers)
+                  .HasForeignKey(e => e.OrganizationId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            
+            // Relationship: OrganizationMember -> User
+            entity.HasOne(e => e.User)
+                  .WithMany(u => u.OrganizationMemberships)
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            
+            // Ensure unique combination of OrganizationId and UserId
+            entity.HasIndex(e => new { e.OrganizationId, e.UserId }).IsUnique();
         });
         
         // Seed data for development
