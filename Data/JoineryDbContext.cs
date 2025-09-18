@@ -11,6 +11,8 @@ public class JoineryDbContext : DbContext
     
     public DbSet<DatabaseQuery> DatabaseQueries { get; set; }
     public DbSet<User> Users { get; set; }
+    public DbSet<Team> Teams { get; set; }
+    public DbSet<TeamMember> TeamMembers { get; set; }
     
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -42,6 +44,45 @@ public class JoineryDbContext : DbContext
             entity.Property(e => e.AuthProvider).IsRequired().HasMaxLength(50);
             entity.Property(e => e.ExternalId).IsRequired().HasMaxLength(100);
             entity.HasIndex(e => new { e.AuthProvider, e.ExternalId }).IsUnique();
+        });
+        
+        // Configure Team entity
+        modelBuilder.Entity<Team>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.CreatedByUserId).IsRequired();
+            
+            // Relationship: Team -> User (CreatedBy)
+            entity.HasOne(e => e.CreatedByUser)
+                  .WithMany(u => u.CreatedTeams)
+                  .HasForeignKey(e => e.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+        
+        // Configure TeamMember entity
+        modelBuilder.Entity<TeamMember>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TeamId).IsRequired();
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.Role).IsRequired();
+            
+            // Relationship: TeamMember -> Team
+            entity.HasOne(e => e.Team)
+                  .WithMany(t => t.TeamMembers)
+                  .HasForeignKey(e => e.TeamId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            
+            // Relationship: TeamMember -> User
+            entity.HasOne(e => e.User)
+                  .WithMany(u => u.TeamMemberships)
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            
+            // Ensure unique combination of TeamId and UserId
+            entity.HasIndex(e => new { e.TeamId, e.UserId }).IsUnique();
         });
         
         // Seed data for development
