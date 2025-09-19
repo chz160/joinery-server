@@ -140,21 +140,25 @@ For organizations that want to use Microsoft Entra ID integration:
 
 ### 3. Configure Secrets (IMPORTANT SECURITY STEP)
 
-> ⚠️ **CRITICAL SECURITY WARNING**: NEVER commit real credentials to version control! Always use template files and secure configuration management.
+> ⚠️ **CRITICAL SECURITY WARNING**: The repository includes template configuration files with placeholder values. NEVER replace these placeholders with real credentials in tracked files!
 
-#### Option A: Use Configuration Files (Recommended for Development)
+#### Development Configuration (Recommended)
 
-1. **Copy template files**:
+The provided configuration files (`appsettings.Development.json`, `appsettings.json`) contain safe placeholder values and should remain as templates:
+
+1. **For local development with real credentials**, create local override files:
    ```bash
-   cp appsettings.Development.json.example appsettings.Development.json
-   cp appsettings.json.example appsettings.json
+   # Create local files that are ignored by git
+   cp appsettings.Development.json appsettings.Development.local.json
    ```
 
-2. **Update configuration files** with your real credentials:
-   - Edit `appsettings.Development.json` for development settings
-   - Edit `appsettings.json` for production settings (if deploying)
+2. **Edit your local file** (`appsettings.Development.local.json`) with real credentials
+3. **Configure ASP.NET Core** to use local files by adding this to your project:
+   ```json
+   // ASP.NET Core will automatically load appsettings.Development.local.json in Development environment
+   ```
 
-#### Option B: Use Environment Variables (Recommended for Production)
+#### Alternative: Environment Variables (Recommended for Production)
 
 1. **Copy the environment template**:
    ```bash
@@ -167,7 +171,7 @@ For organizations that want to use Microsoft Entra ID integration:
 
 ### 4. Update Configuration
 
-Update your configuration files with your authentication credentials:
+The application includes template configuration files with placeholder values:
 
 ```json
 {
@@ -454,10 +458,16 @@ Key configuration sections in `appsettings.json`:
 ### 🔐 Credential Management
 
 #### NEVER Commit These Files:
-- `appsettings.Development.json` with real credentials
-- `appsettings.Production.json` or `appsettings.*.json` with secrets
-- `.env` files containing real values
+- Local configuration overrides (`appsettings.*.local.json`)
+- `.env` files containing real values  
 - Any file containing API keys, client secrets, or JWT secret keys
+- Modified template files with real credentials
+
+#### Safe to Commit (Templates Only):
+- `appsettings.Development.json` (with placeholder values only)
+- `appsettings.json` (with placeholder values only)
+- `*.example` files
+- Configuration templates without real secrets
 
 #### Types of Sensitive Information:
 - **OAuth Client Secrets**: GitHub and Microsoft authentication secrets
@@ -468,11 +478,12 @@ Key configuration sections in `appsettings.json`:
 - **Environment Variables**: Production configuration values
 
 #### Safe Configuration Practices:
-1. **Use Template Files**: Always use `.example` template files for reference
-2. **Environment Variables**: Use environment variables for production deployments
-3. **Secret Management**: Use Azure Key Vault, AWS Secrets Manager, or similar for production
-4. **Local Development**: Keep development credentials separate from production
-5. **Regular Rotation**: Rotate secrets regularly, especially before major releases
+1. **Keep Templates in Git**: Template files with placeholders can be tracked
+2. **Use Local Overrides**: Create `*.local.json` files for real credentials  
+3. **Environment Variables**: Use environment variables for production deployments
+4. **Secret Management**: Use Azure Key Vault, AWS Secrets Manager, or similar for production
+5. **Local Development**: Keep development credentials separate from production
+6. **Regular Rotation**: Rotate secrets regularly, especially before major releases
 
 ### 🛡️ Pre-commit Security Checks
 

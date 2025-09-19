@@ -64,11 +64,11 @@ out/
 # ====================
 # SECURITY: Sensitive Configuration Files
 # ====================
-# Development configuration files containing real credentials
-appsettings.Development.json
-appsettings.Production.json
-appsettings.Staging.json
-appsettings.*.json
+# Local configuration files with real credentials (rename from templates)
+appsettings.Local.json
+appsettings.Development.local.json
+appsettings.Production.local.json
+appsettings.Staging.local.json
 
 # Environment files
 .env
