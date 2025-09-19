@@ -60,6 +60,10 @@ JoineryServer.csproj.user
 
 # Output directory
 out/
+publish/
+
+# Production deployment files (not templates)
+appsettings.Production.json
 
 # ====================
 # SECURITY: Sensitive Configuration Files

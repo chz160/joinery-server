@@ -1,0 +1,32 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "JoineryServer": "Information"
+    }
+  },
+  "AllowedHosts": "your-production-domain.com",
+  "Authentication": {
+    "GitHub": {
+      "ClientId": "your-production-github-client-id",
+      "ClientSecret": "your-production-github-client-secret"
+    },
+    "Microsoft": {
+      "Instance": "https://login.microsoftonline.com/",
+      "TenantId": "your-production-tenant-id",
+      "ClientId": "your-production-microsoft-client-id",
+      "ClientSecret": "your-production-microsoft-client-secret",
+      "CallbackPath": "/signin-microsoft"
+    }
+  },
+  "JWT": {
+    "SecretKey": "your-production-secret-key-for-jwt-tokens-must-be-at-least-256-bits-long",
+    "Issuer": "JoineryServer",
+    "Audience": "JoineryClients",
+    "ExpirationHours": 24
+  },
+  "ConnectionStrings": {
+    "DefaultConnection": "your-production-database-connection-string-if-using-external-database"
+  }
+}
