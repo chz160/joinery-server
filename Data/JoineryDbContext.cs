@@ -15,6 +15,7 @@ public class JoineryDbContext : DbContext
     public DbSet<TeamMember> TeamMembers { get; set; }
     public DbSet<Organization> Organizations { get; set; }
     public DbSet<OrganizationMember> OrganizationMembers { get; set; }
+    public DbSet<OrganizationAwsIamConfig> OrganizationAwsIamConfigs { get; set; }
     public DbSet<GitRepository> GitRepositories { get; set; }
     public DbSet<GitQueryFile> GitQueryFiles { get; set; }
     
@@ -194,6 +195,27 @@ public class JoineryDbContext : DbContext
             
             // Ensure unique combination of GitRepositoryId and FilePath
             entity.HasIndex(e => new { e.GitRepositoryId, e.FilePath }).IsUnique();
+        });
+        
+        // Configure OrganizationAwsIamConfig entity
+        modelBuilder.Entity<OrganizationAwsIamConfig>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.Property(e => e.AwsRegion).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.AccessKeyId).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.SecretAccessKey).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.RoleArn).HasMaxLength(200);
+            entity.Property(e => e.ExternalId).HasMaxLength(100);
+            
+            // Relationship: OrganizationAwsIamConfig -> Organization
+            entity.HasOne(e => e.Organization)
+                  .WithOne()
+                  .HasForeignKey<OrganizationAwsIamConfig>(e => e.OrganizationId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            
+            // Ensure unique configuration per organization
+            entity.HasIndex(e => e.OrganizationId).IsUnique();
         });
         
         // Seed data for development
