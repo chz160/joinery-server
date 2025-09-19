@@ -27,6 +27,9 @@ builder.Services.AddScoped<IGitRepositoryService, GitRepositoryService>();
 // Add team permission service
 builder.Services.AddScoped<ITeamPermissionService, TeamPermissionService>();
 
+// Add AWS IAM service
+builder.Services.AddScoped<IAwsIamService, AwsIamService>();
+
 // Configure authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
