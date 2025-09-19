@@ -57,3 +57,6 @@ nunit-*.xml
 #IDEs
 .vs/
 JoineryServer.csproj.user
+
+# Output directory
+out/

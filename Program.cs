@@ -63,13 +63,13 @@ builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo 
-    { 
-        Title = "Joinery Server API", 
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Joinery Server API",
         Version = "v1",
         Description = "A minimal MVP API for sharing database queries with authentication"
     });
-    
+
     // Add JWT authentication to Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
@@ -80,7 +80,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "bearer",
         BearerFormat = "JWT"
     });
-    
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {

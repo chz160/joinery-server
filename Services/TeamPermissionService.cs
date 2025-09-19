@@ -34,7 +34,7 @@ public class TeamPermissionService : ITeamPermissionService
     {
         if (!teamId.HasValue)
             return false;
-            
+
         return await HasPermissionAsync(userId, teamId.Value, permission);
     }
 
@@ -43,14 +43,14 @@ public class TeamPermissionService : ITeamPermissionService
         // Check if user is team creator (has full access)
         var team = await _context.Teams
             .FirstOrDefaultAsync(t => t.Id == teamId && t.IsActive);
-            
+
         if (team?.CreatedByUserId == userId)
             return TeamPermission.FullAccess;
 
         // Get user's team membership
         var teamMember = await _context.TeamMembers
             .FirstOrDefaultAsync(tm => tm.TeamId == teamId && tm.UserId == userId && tm.IsActive);
-            
+
         return teamMember?.GetEffectivePermissions() ?? TeamPermission.None;
     }
 
@@ -58,7 +58,7 @@ public class TeamPermissionService : ITeamPermissionService
     {
         if (!teamId.HasValue)
             return TeamPermission.None;
-            
+
         return await GetUserPermissionsAsync(userId, teamId.Value);
     }
 }

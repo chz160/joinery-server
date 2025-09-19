@@ -43,7 +43,7 @@ public class OrganizationsController : ControllerBase
 
         var organizations = await _context.Organizations
             .Where(o => o.IsActive && (
-                o.CreatedByUserId == currentUserId || 
+                o.CreatedByUserId == currentUserId ||
                 o.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive)
             ))
             .Include(o => o.CreatedByUser)
@@ -99,7 +99,7 @@ public class OrganizationsController : ControllerBase
 
         var isCreator = organization.CreatedByUserId == currentUserId;
         var isMember = organization.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive);
-        
+
         if (!isCreator && !isMember)
         {
             _logger.LogWarning("User {UserId} attempted to access organization {OrganizationId} without permission", currentUserId, id);
@@ -324,7 +324,7 @@ public class OrganizationsController : ControllerBase
         // Check if current user is administrator
         var isCreator = organization.CreatedByUserId == currentUserId;
         var isAdmin = organization.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive && om.Role == OrganizationRole.Administrator);
-        
+
         if (!isCreator && !isAdmin)
         {
             return Forbid();
@@ -476,7 +476,7 @@ public class OrganizationsController : ControllerBase
         // Check if current user is administrator
         var isCreator = organization.CreatedByUserId == currentUserId;
         var isAdmin = organization.OrganizationMembers.Any(om => om.UserId == currentUserId && om.IsActive && om.Role == OrganizationRole.Administrator);
-        
+
         if (!isCreator && !isAdmin)
         {
             return Forbid();

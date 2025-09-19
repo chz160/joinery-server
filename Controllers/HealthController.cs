@@ -21,7 +21,7 @@ public class HealthController : ControllerBase
     public ActionResult<object> GetHealth()
     {
         _logger.LogInformation("Health check requested");
-        
+
         return Ok(new
         {
             Status = "Healthy",
@@ -39,7 +39,7 @@ public class HealthController : ControllerBase
     public ActionResult<object> GetReadiness()
     {
         _logger.LogInformation("Readiness check requested");
-        
+
         return Ok(new
         {
             Status = "Ready",
