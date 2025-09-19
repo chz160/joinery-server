@@ -451,6 +451,365 @@ Key configuration sections in `appsettings.json`:
 }
 ```
 
+## Production Deployment
+
+> 🚀 **Important:** This section provides comprehensive guidance for deploying Joinery Server to production environments with security best practices.
+
+### Environment-Specific Configuration
+
+#### Option 1: Configuration Files (Recommended for Container Deployments)
+
+Create production configuration files using the provided templates:
+
+```bash
+# Copy the production template
+cp appsettings.Production.json.example appsettings.Production.json
+
+# Edit with production values (DO NOT commit this file)
+# Configure your deployment to include this file at runtime
+```
+
+**Production appsettings.Production.json structure:**
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning",
+      "JoineryServer": "Information"
+    }
+  },
+  "AllowedHosts": "your-production-domain.com",
+  "Authentication": {
+    "GitHub": {
+      "ClientId": "your-production-github-client-id",
+      "ClientSecret": "your-production-github-client-secret"
+    },
+    "Microsoft": {
+      "TenantId": "your-production-tenant-id",
+      "ClientId": "your-production-microsoft-client-id",
+      "ClientSecret": "your-production-microsoft-client-secret"
+    }
+  },
+  "JWT": {
+    "SecretKey": "your-production-jwt-secret-key-256-bits-minimum",
+    "Issuer": "JoineryServer",
+    "Audience": "JoineryClients",
+    "ExpirationHours": 24
+  }
+}
+```
+
+#### Option 2: Environment Variables (Recommended for Cloud Deployments)
+
+Use environment variables for cloud-native deployments:
+
+```bash
+# Copy and configure environment variables
+cp .env.example .env.production
+
+# Set required environment variables in your deployment system
+export ASPNETCORE_ENVIRONMENT=Production
+export Authentication__GitHub__ClientId="your-production-github-client-id"
+export Authentication__GitHub__ClientSecret="your-production-github-client-secret"
+export Authentication__Microsoft__TenantId="your-production-tenant-id"
+export Authentication__Microsoft__ClientId="your-production-microsoft-client-id"
+export Authentication__Microsoft__ClientSecret="your-production-microsoft-client-secret"
+export JWT__SecretKey="your-production-jwt-secret-key-256-bits-minimum"
+export JWT__Issuer="JoineryServer"
+export JWT__Audience="JoineryClients"
+export JWT__ExpirationHours="24"
+export ASPNETCORE_URLS="http://+:5000;https://+:5001"
+```
+
+### Required Secrets and Configuration
+
+#### Critical Production Secrets (NEVER in source control):
+- **`Authentication__GitHub__ClientSecret`**: GitHub OAuth application secret
+- **`Authentication__Microsoft__ClientSecret`**: Microsoft Entra ID application secret
+- **`JWT__SecretKey`**: JWT token signing key (minimum 256 bits)
+- **`ConnectionStrings__DefaultConnection`**: Database connection string (if using external database)
+
+#### Required Configuration Values:
+- **`Authentication__GitHub__ClientId`**: GitHub OAuth application client ID
+- **`Authentication__Microsoft__TenantId`**: Azure AD tenant ID
+- **`Authentication__Microsoft__ClientId`**: Microsoft application client ID
+- **`JWT__Issuer`**: Token issuer identifier (e.g., "JoineryServer")
+- **`JWT__Audience`**: Token audience identifier (e.g., "JoineryClients")
+- **`AllowedHosts`**: Allowed host names for the application
+
+#### Optional Configuration:
+- **`JWT__ExpirationHours`**: Token expiration time (default: 24 hours)
+- **`Logging__LogLevel__*`**: Application logging levels
+- **`ASPNETCORE_URLS`**: Server URLs and ports
+
+### Managed Secrets Stores (Highly Recommended)
+
+#### Azure Key Vault Integration
+```bash
+# Install Azure Key Vault configuration provider
+dotnet add package Microsoft.Extensions.Configuration.AzureKeyVault
+
+# Configure in Program.cs (add to your deployment)
+builder.Configuration.AddAzureKeyVault(
+    new Uri("https://your-keyvault.vault.azure.net/"),
+    new DefaultAzureCredential()
+);
+```
+
+**Key Vault Secret Names:**
+- `Authentication--GitHub--ClientSecret`
+- `Authentication--Microsoft--ClientSecret`
+- `JWT--SecretKey`
+- `ConnectionStrings--DefaultConnection`
+
+#### AWS Secrets Manager Integration
+```bash
+# Install AWS Secrets Manager configuration provider
+dotnet add package Amazon.Extensions.Configuration.SystemsManager
+
+# Environment variables for AWS credentials
+export AWS_REGION=us-east-1
+export AWS_ACCESS_KEY_ID=your-access-key
+export AWS_SECRET_ACCESS_KEY=your-secret-key
+```
+
+#### Alternative Secret Stores:
+- **HashiCorp Vault**: Enterprise secret management
+- **Google Secret Manager**: Google Cloud secret management
+- **Kubernetes Secrets**: Container orchestration secrets
+- **Docker Secrets**: Docker Swarm secret management
+
+### Production Deployment Checklist
+
+#### 1. Pre-deployment Setup
+- [ ] **OAuth Applications Configured:**
+  - [ ] GitHub OAuth app created with production callback URLs
+  - [ ] Microsoft Entra ID app registration configured
+  - [ ] Callback URLs match your production domain
+- [ ] **Secrets Management:**
+  - [ ] Production secrets stored in managed secret store (Azure Key Vault, AWS Secrets Manager)
+  - [ ] JWT secret key generated (minimum 256 bits)
+  - [ ] All placeholder values replaced with production values
+- [ ] **Infrastructure Preparation:**
+  - [ ] Production server/container environment configured
+  - [ ] HTTPS certificates installed and configured
+  - [ ] Database server configured (if using external database)
+  - [ ] DNS records configured for production domain
+
+#### 2. Build and Package
+```bash
+# Clean build
+dotnet clean
+dotnet restore
+
+# Build for production
+dotnet build -c Release
+
+# Publish application
+dotnet publish JoineryServer.csproj -c Release -o ./publish
+
+# Verify published files
+ls -la ./publish/
+```
+
+#### 3. Configuration Deployment
+- [ ] **Environment Variables Set:**
+  ```bash
+  # Verify critical environment variables
+  echo $ASPNETCORE_ENVIRONMENT  # Should be "Production"
+  echo $Authentication__GitHub__ClientId
+  echo $JWT__Issuer
+  # DO NOT echo secrets in production logs
+  ```
+- [ ] **Configuration Files:**
+  - [ ] `appsettings.Production.json` deployed (if using file-based config)
+  - [ ] No template files with placeholder values in production
+- [ ] **Security Verification:**
+  - [ ] No `.local.json` files in production
+  - [ ] No `.env` files with real secrets committed to source control
+  - [ ] All secrets retrieved from managed secret store
+
+#### 4. Application Startup
+```bash
+# Start application in production mode
+cd ./publish
+export ASPNETCORE_ENVIRONMENT=Production
+dotnet JoineryServer.dll
+
+# Alternative: Use systemd service, Docker, or process manager
+```
+
+#### 5. Health Verification
+```bash
+# Test health endpoints
+curl -f http://localhost:5000/api/health
+# Expected: {"Status":"Healthy","Timestamp":"...","Version":"1.0.0","Service":"Joinery Server"}
+
+curl -f http://localhost:5000/api/health/ready
+# Expected: {"Status":"Ready","Timestamp":"...","Message":"Service is ready to accept requests"}
+
+# Test HTTPS (if configured)
+curl -f https://your-production-domain.com/api/health
+
+# Verify authentication endpoints respond
+curl -I https://your-production-domain.com/api/auth/login/github
+# Expected: HTTP redirect to GitHub OAuth
+```
+
+#### 6. Security Verification
+- [ ] **HTTPS Enforcement:**
+  - [ ] Application only accepts HTTPS in production
+  - [ ] HTTP requests redirect to HTTPS
+  - [ ] SSL/TLS certificates valid and properly configured
+- [ ] **Authentication Testing:**
+  - [ ] GitHub OAuth flow works end-to-end
+  - [ ] Microsoft Entra ID OAuth flow works end-to-end
+  - [ ] JWT tokens generated with correct expiration
+- [ ] **API Security:**
+  - [ ] Protected endpoints return 401 without authentication
+  - [ ] JWT tokens properly validated
+  - [ ] CORS configured for production domains only
+
+#### 7. Monitoring and Logging
+- [ ] **Application Logging:**
+  - [ ] Log levels configured appropriately for production
+  - [ ] No sensitive data logged (secrets, tokens, passwords)
+  - [ ] Structured logging implemented for monitoring tools
+- [ ] **Health Monitoring:**
+  - [ ] Health check endpoints monitored
+  - [ ] Application performance monitoring configured
+  - [ ] Error tracking and alerting set up
+
+### Production Environment Variables Template
+
+```bash
+# Production Environment Configuration
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_URLS=https://+:5001;http://+:5000
+ASPNETCORE_HTTPS_PORT=5001
+
+# Domain Configuration
+AllowedHosts=your-production-domain.com
+
+# Authentication (retrieve from secure secret store)
+Authentication__GitHub__ClientId=prod-github-client-id
+Authentication__GitHub__ClientSecret=prod-github-client-secret
+Authentication__Microsoft__TenantId=prod-tenant-id
+Authentication__Microsoft__ClientId=prod-microsoft-client-id
+Authentication__Microsoft__ClientSecret=prod-microsoft-client-secret
+
+# JWT Configuration (retrieve secret from secure store)
+JWT__SecretKey=production-jwt-secret-key-minimum-256-bits
+JWT__Issuer=JoineryServer
+JWT__Audience=JoineryClients
+JWT__ExpirationHours=24
+
+# Database (if using external database)
+ConnectionStrings__DefaultConnection=production-database-connection-string
+
+# Logging
+Logging__LogLevel__Default=Information
+Logging__LogLevel__Microsoft__AspNetCore=Warning
+```
+
+### Security Warnings
+
+> ⚠️ **CRITICAL SECURITY WARNINGS:**
+
+1. **Never Store Secrets in Source Control:**
+   - Never commit `appsettings.Production.json` with real values
+   - Never commit `.env` files with production secrets
+   - Use `.gitignore` to exclude all production configuration files
+
+2. **Use Managed Secret Stores:**
+   - Azure Key Vault, AWS Secrets Manager, or equivalent
+   - Rotate secrets regularly (every 90 days recommended)
+   - Use different secrets for different environments
+
+3. **Network Security:**
+   - Enable HTTPS only in production
+   - Configure proper CORS policies for production domains
+   - Use reverse proxy (nginx, Apache) for additional security
+
+4. **Monitoring and Auditing:**
+   - Enable audit logging for authentication events
+   - Monitor for unusual authentication patterns
+   - Set up alerts for health check failures
+
+5. **Regular Security Maintenance:**
+   - Keep .NET runtime updated
+   - Update NuGet packages regularly for security patches
+   - Review and rotate OAuth application secrets
+   - Monitor GitHub/Microsoft security advisories
+
+### Deployment Examples
+
+#### Docker Deployment
+```dockerfile
+# Dockerfile for production
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
+WORKDIR /app
+EXPOSE 80
+EXPOSE 443
+
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+COPY ["JoineryServer.csproj", "./"]
+RUN dotnet restore
+COPY . .
+RUN dotnet build "JoineryServer.csproj" -c Release -o /app/build
+
+FROM build AS publish
+RUN dotnet publish "JoineryServer.csproj" -c Release -o /app/publish
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "JoineryServer.dll"]
+```
+
+```bash
+# Build and run with Docker
+docker build -t joinery-server .
+docker run -d \
+  -p 5000:80 -p 5001:443 \
+  -e ASPNETCORE_ENVIRONMENT=Production \
+  -e Authentication__GitHub__ClientId="your-client-id" \
+  --env-file .env.production \
+  joinery-server
+```
+
+#### Systemd Service
+```ini
+# /etc/systemd/system/joinery-server.service
+[Unit]
+Description=Joinery Server
+After=network.target
+
+[Service]
+Type=notify
+WorkingDirectory=/opt/joinery-server
+ExecStart=/usr/bin/dotnet JoineryServer.dll
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+SyslogIdentifier=joinery-server
+User=www-data
+Environment=ASPNETCORE_ENVIRONMENT=Production
+EnvironmentFile=/opt/joinery-server/.env.production
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+# Install and start service
+sudo systemctl enable joinery-server
+sudo systemctl start joinery-server
+sudo systemctl status joinery-server
+```
+
 ## Security Notes
 
 > ⚠️ **CRITICAL**: This application handles sensitive credentials and authentication tokens. Follow these security practices carefully.
