@@ -138,9 +138,36 @@ For organizations that want to use Microsoft Entra ID integration:
 5. **Organization Configuration**:
    Organizations can configure Entra ID integration through the API after creating their organization.
 
-### 3. Update Configuration
+### 3. Configure Secrets (IMPORTANT SECURITY STEP)
 
-Update `appsettings.Development.json` with your authentication credentials:
+> ⚠️ **CRITICAL SECURITY WARNING**: NEVER commit real credentials to version control! Always use template files and secure configuration management.
+
+#### Option A: Use Configuration Files (Recommended for Development)
+
+1. **Copy template files**:
+   ```bash
+   cp appsettings.Development.json.example appsettings.Development.json
+   cp appsettings.json.example appsettings.json
+   ```
+
+2. **Update configuration files** with your real credentials:
+   - Edit `appsettings.Development.json` for development settings
+   - Edit `appsettings.json` for production settings (if deploying)
+
+#### Option B: Use Environment Variables (Recommended for Production)
+
+1. **Copy the environment template**:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Update `.env` file** with your real values (the application will automatically load these)
+
+3. **Configure your deployment environment** to use these variables
+
+### 4. Update Configuration
+
+Update your configuration files with your authentication credentials:
 
 ```json
 {
@@ -158,7 +185,7 @@ Update `appsettings.Development.json` with your authentication credentials:
 }
 ```
 
-### 4. Run the Application
+### 5. Run the Application
 
 ```bash
 dotnet restore
@@ -422,6 +449,80 @@ Key configuration sections in `appsettings.json`:
 
 ## Security Notes
 
+> ⚠️ **CRITICAL**: This application handles sensitive credentials and authentication tokens. Follow these security practices carefully.
+
+### 🔐 Credential Management
+
+#### NEVER Commit These Files:
+- `appsettings.Development.json` with real credentials
+- `appsettings.Production.json` or `appsettings.*.json` with secrets
+- `.env` files containing real values
+- Any file containing API keys, client secrets, or JWT secret keys
+
+#### Types of Sensitive Information:
+- **OAuth Client Secrets**: GitHub and Microsoft authentication secrets
+- **JWT Secret Keys**: Used for token signing and validation
+- **Database Connection Strings**: If using external databases
+- **API Keys**: Any third-party service keys
+- **Certificates**: SSL certificates and private keys
+- **Environment Variables**: Production configuration values
+
+#### Safe Configuration Practices:
+1. **Use Template Files**: Always use `.example` template files for reference
+2. **Environment Variables**: Use environment variables for production deployments
+3. **Secret Management**: Use Azure Key Vault, AWS Secrets Manager, or similar for production
+4. **Local Development**: Keep development credentials separate from production
+5. **Regular Rotation**: Rotate secrets regularly, especially before major releases
+
+### 🛡️ Pre-commit Security Checks
+
+#### Recommended Tools:
+1. **git-secrets**: Scan for sensitive data before commits
+   ```bash
+   # Install git-secrets
+   git clone https://github.com/awslabs/git-secrets.git
+   cd git-secrets && make install
+   
+   # Configure for your repo
+   cd /path/to/your/repo
+   git secrets --install
+   git secrets --register-aws
+   git secrets --add-provider -- cat .gitsecrets
+   ```
+
+2. **detect-secrets**: Advanced secret scanning
+   ```bash
+   pip install detect-secrets
+   detect-secrets scan --all-files
+   ```
+
+3. **GitHub Secret Scanning**: Enable on your repository
+   - Go to repository Settings > Security & analysis
+   - Enable "Secret scanning" and "Push protection"
+
+4. **Pre-commit Hooks**: Add to `.pre-commit-config.yaml`
+   ```yaml
+   repos:
+     - repo: https://github.com/Yelp/detect-secrets
+       rev: v1.4.0
+       hooks:
+         - id: detect-secrets
+           args: ['--baseline', '.secrets.baseline']
+   ```
+
+### 🔍 Secret Detection Patterns
+
+The following patterns indicate potential secrets:
+- `ClientSecret`: OAuth client secrets
+- `SecretKey`: JWT signing keys  
+- `ConnectionString`: Database connections
+- `ApiKey` or `API_KEY`: Service API keys
+- `Password` or `Pass`: Authentication passwords
+- Base64 encoded strings longer than 40 characters
+- Hexadecimal strings longer than 32 characters
+- AWS Access Key patterns (AKIA...)
+- Private key headers (-----BEGIN PRIVATE KEY-----)
+
 ### JWT Token Security
 - JWT tokens expire based on configuration (default: 24 hours, 1 hour in development)
 - Tokens are signed using HMAC SHA256 with configurable secret keys
@@ -440,10 +541,54 @@ Key configuration sections in `appsettings.json`:
 - Implement HTTPS in production (configured by default)
 - Consider token refresh mechanisms for long-running applications
 - Regularly rotate JWT secret keys and OAuth client secrets
+- Enable secret scanning on your repositories
+- Use infrastructure as code for reproducible deployments
+- Monitor for unusual authentication patterns
+- Implement proper logging while avoiding logging sensitive data
+
+### 🚨 Emergency Response
+If sensitive data is accidentally committed:
+1. **Immediately rotate** all exposed credentials
+2. **Force push** to remove from history (if possible)
+3. **Review access logs** for unauthorized usage
+4. **Update security documentation** to prevent recurrence
+5. **Consider using** `git filter-branch` or BFG Repo-Cleaner for history cleanup
 
 ## Contributing
 
 This is a minimal viable product (MVP) focused on core functionality. Contributions should maintain simplicity while adding value.
+
+### 🔒 Security Requirements for Contributors
+
+Before contributing, please ensure:
+
+1. **Never commit sensitive data**:
+   - Use only template files (`.example` files) in commits
+   - Test with placeholder credentials only
+   - Review changes for accidentally included secrets
+
+2. **Run security checks**:
+   ```bash
+   # Check for secrets before committing
+   git diff --cached | grep -E "(secret|key|password|token)" 
+   
+   # Ensure template files are used
+   git diff --cached --name-only | grep -E "appsettings.*\.json$" | grep -v "\.example$"
+   ```
+
+3. **Follow security best practices**:
+   - Document any new configuration requirements in template files
+   - Update security documentation for new features
+   - Consider security implications of API changes
+   - Test authentication and authorization flows
+
+4. **Security-focused pull request checklist**:
+   - [ ] No real credentials committed
+   - [ ] Template files updated if needed
+   - [ ] Security documentation updated
+   - [ ] .gitignore updated for new sensitive file types
+   - [ ] New endpoints have proper authentication
+   - [ ] Input validation implemented for user data
 
 ## License
 
