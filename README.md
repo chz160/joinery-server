@@ -31,10 +31,11 @@ The server-side portion of Joinery - a platform for sharing and managing databas
 
 ## Features
 
-- **Authentication**: GitHub OAuth and Microsoft Entra ID integration with JWT token-based security
+- **Authentication**: GitHub OAuth, Microsoft Entra ID, and AWS IAM integration with JWT token-based security
 - **Multi-source Query Access**: Support for both database queries and Git repository-based SQL files
-- **Organization Management**: Create and manage organizations with role-based access control
+- **Organization Management**: Create and manage organizations with role-based access control and AWS IAM integration
 - **Team Management**: Complete team lifecycle with administrator permissions and member roles
+- **AWS IAM Integration**: Import users from AWS IAM and enable authentication using AWS credentials
 - **Git Repository Integration**: Connect and synchronize SQL queries from external Git repositories
 - **Advanced Permission System**: Granular permissions for query access and folder management
 - **RESTful API**: Clean, documented endpoints with comprehensive Swagger documentation
@@ -48,6 +49,7 @@ The server-side portion of Joinery - a platform for sharing and managing databas
 - Visual Studio, Visual Studio Code, or any text editor
 - GitHub OAuth App (for GitHub authentication)
 - Microsoft Entra ID App Registration (for Microsoft authentication)
+- AWS IAM credentials (for AWS authentication integration)
 
 ## Setup
 
@@ -77,6 +79,31 @@ cd joinery-server
    - Redirect URI: `https://localhost:7050/signin-microsoft`
 3. Copy the Application (client) ID, Directory (tenant) ID
 4. Create a client secret in "Certificates & secrets"
+
+### 2c. Configure AWS IAM (Optional)
+
+For organizations that want to use AWS IAM integration:
+
+1. Create an IAM user with programmatic access
+2. Attach the following IAM policy (minimum required permissions):
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iam:ListUsers",
+                "iam:GetUser",
+                "iam:ListUserTags"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+3. For cross-account access, create a role with the above policy and note the Role ARN
+4. Organizations can configure AWS IAM integration through the API after creating their organization
 
 ### 3. Update Configuration
 
@@ -116,6 +143,7 @@ The application will start at:
 
 - `GET /api/auth/login/github` - Initiate GitHub OAuth login
 - `GET /api/auth/login/microsoft` - Initiate Microsoft OAuth login
+- `POST /api/auth/login/aws` - Authenticate with AWS IAM credentials
 - `GET /api/auth/callback/github` - GitHub OAuth callback
 - `GET /api/auth/callback/microsoft` - Microsoft OAuth callback
 
@@ -157,6 +185,13 @@ The application will start at:
 - `DELETE /api/organizations/{id}/members/{userId}` - Remove member from organization (admins only, or self)
 - `PUT /api/organizations/{id}/members/{userId}/role` - Update member role (admins only)
 
+### AWS IAM Integration (Authenticated)
+
+- `GET /api/organizations/{id}/aws-iam/config` - Get AWS IAM configuration for organization
+- `POST /api/organizations/{id}/aws-iam/config` - Configure AWS IAM for organization (admins only)
+- `DELETE /api/organizations/{id}/aws-iam/config` - Remove AWS IAM configuration (admins only)
+- `POST /api/organizations/{id}/aws-iam/import-users` - Import users from AWS IAM (admins only)
+
 ### Health Checks
 
 - `GET /api/health` - Service health check with version and timestamp
@@ -168,9 +203,18 @@ The application will start at:
 Navigate to `/swagger` endpoint (e.g., `https://localhost:7050/swagger`) for interactive API documentation with JWT authentication support.
 
 ### 2. Authenticate  
-Use one of the login endpoints to authenticate via GitHub or Microsoft:
+Use one of the login endpoints to authenticate via GitHub, Microsoft, or AWS IAM:
 - GitHub: `GET /api/auth/login/github`
 - Microsoft: `GET /api/auth/login/microsoft`
+- AWS IAM: `POST /api/auth/login/aws` (requires organization setup)
+
+For AWS IAM authentication, send a JSON request:
+```json
+{
+  "username": "your-aws-username",
+  "organizationName": "your-organization"
+}
+```
 
 ### 3. Get JWT Token
 After successful authentication, you'll receive a JWT token in the callback response.
@@ -187,7 +231,19 @@ Authorization: Bearer your-jwt-token
 - Administrators can manage members, roles, and team permissions
 - Support for role-based access control across all resources
 
-### 6. Git Repository Integration
+### 6. AWS IAM Integration
+Organization administrators can configure AWS IAM integration to:
+- Import existing AWS IAM users as organization members
+- Allow AWS IAM users to authenticate using their AWS credentials
+- Automatically synchronize user information from AWS IAM
+
+**To configure AWS IAM for an organization:**
+1. Ensure you have AWS IAM credentials with ListUsers, GetUser, and ListUserTags permissions
+2. Use `POST /api/organizations/{id}/aws-iam/config` with AWS credentials
+3. Import users with `POST /api/organizations/{id}/aws-iam/import-users`
+4. Users can then authenticate using `POST /api/auth/login/aws`
+
+### 7. Git Repository Integration
 - Connect external Git repositories containing SQL query files
 - Support for personal, team-level, and organization-level repository access
 - Automatic synchronization of query files from connected repositories

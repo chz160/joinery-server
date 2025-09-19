@@ -7,6 +7,7 @@ using System.Security.Claims;
 using System.Text;
 using JoineryServer.Data;
 using JoineryServer.Models;
+using JoineryServer.Services;
 
 namespace JoineryServer.Controllers;
 
@@ -17,12 +18,14 @@ public class AuthController : ControllerBase
     private readonly IConfiguration _configuration;
     private readonly JoineryDbContext _context;
     private readonly ILogger<AuthController> _logger;
+    private readonly IAwsIamService _awsIamService;
 
-    public AuthController(IConfiguration configuration, JoineryDbContext context, ILogger<AuthController> logger)
+    public AuthController(IConfiguration configuration, JoineryDbContext context, ILogger<AuthController> logger, IAwsIamService awsIamService)
     {
         _configuration = configuration;
         _context = context;
         _logger = logger;
+        _awsIamService = awsIamService;
     }
 
     /// <summary>
@@ -155,6 +158,78 @@ public class AuthController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Authenticate with AWS IAM credentials
+    /// </summary>
+    [HttpPost("login/aws")]
+    public async Task<IActionResult> LoginAws([FromBody] AwsLoginRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(request.Username) || string.IsNullOrEmpty(request.OrganizationName))
+            {
+                return BadRequest(new { message = "Username and organization name are required" });
+            }
+
+            // Find the organization and its AWS IAM configuration
+            var organization = await _context.Organizations
+                .Include(o => o.OrganizationMembers)
+                .FirstOrDefaultAsync(o => o.Name == request.OrganizationName && o.IsActive);
+
+            if (organization == null)
+            {
+                return BadRequest(new { message = "Organization not found" });
+            }
+
+            var awsConfig = await _context.OrganizationAwsIamConfigs
+                .FirstOrDefaultAsync(c => c.OrganizationId == organization.Id && c.IsActive);
+
+            if (awsConfig == null)
+            {
+                return BadRequest(new { message = "AWS IAM not configured for this organization" });
+            }
+
+            // Get the IAM user from AWS
+            var awsUser = await _awsIamService.GetIamUserAsync(awsConfig, request.Username);
+            if (awsUser == null)
+            {
+                return BadRequest(new { message = "User not found in AWS IAM" });
+            }
+
+            // Check if user exists in our system or create them
+            var user = await GetOrCreateUser(awsUser.UserId, awsUser.Username, awsUser.Email, "AWS", awsUser.FullName);
+
+            // Verify the user is a member of this organization
+            var orgMember = await _context.OrganizationMembers
+                .FirstOrDefaultAsync(m => m.OrganizationId == organization.Id && m.UserId == user.Id);
+
+            if (orgMember == null)
+            {
+                return BadRequest(new { message = "User is not a member of this organization" });
+            }
+
+            var token = GenerateJwtToken(user);
+
+            return Ok(new
+            {
+                token,
+                user = new
+                {
+                    user.Id,
+                    user.Username,
+                    user.Email,
+                    user.FullName,
+                    user.AuthProvider
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during AWS IAM authentication");
+            return StatusCode(500, new { message = "Internal server error during authentication" });
+        }
+    }
+
     private async Task<User> GetOrCreateUser(string externalId, string username, string email, string authProvider, string? fullName = null)
     {
         var existingUser = await _context.Users
@@ -216,4 +291,10 @@ public class AuthController : ControllerBase
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+}
+
+public class AwsLoginRequest
+{
+    public string Username { get; set; } = string.Empty;
+    public string OrganizationName { get; set; } = string.Empty;
 }
