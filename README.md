@@ -51,6 +51,7 @@ The server-side portion of Joinery - a platform for sharing and managing databas
 - GitHub OAuth App (for GitHub authentication)
 - Microsoft Entra ID App Registration (for Microsoft authentication)
 - AWS IAM credentials (for AWS authentication integration)
+- Database server (optional - see [Database Setup Guide](DATABASE.md))
 
 ## Setup
 
@@ -189,7 +190,41 @@ The application includes template configuration files with placeholder values:
 }
 ```
 
-### 5. Run the Application
+### 5. Database Setup (Optional)
+
+By default, the application uses an **in-memory database** for development - no additional setup required! The database is automatically created and seeded with sample data when you run the application.
+
+For persistent database storage or production deployment, you have several options:
+
+#### Option 1: Quick Setup Script (Recommended)
+```bash
+# Run the interactive database setup script
+chmod +x setup-database.sh
+./setup-database.sh
+```
+
+#### Option 2: Manual Setup
+For detailed configuration, see the comprehensive [Database Setup Guide](DATABASE.md) which covers:
+
+- **Supported Database Providers**: PostgreSQL, SQL Server, SQLite, MySQL
+- **Entity Framework Migrations**: Schema creation and deployment
+- **Connection String Examples**: Development and production configurations
+- **Production Database Setup**: Step-by-step deployment instructions
+- **Seed Data Management**: Initial data and sample queries
+
+#### Option 3: SQLite Quick Start (Persistent Development Database)
+```bash
+# Add SQLite provider
+dotnet add package Microsoft.EntityFrameworkCore.Sqlite
+
+# Create initial migration
+dotnet ef migrations add InitialCreate
+
+# Apply migration to create database
+dotnet ef database update
+```
+
+### 6. Run the Application
 
 ```bash
 dotnet restore
@@ -383,7 +418,9 @@ The application comes pre-seeded with sample database queries for development:
 - **Health Checks**: Built-in monitoring endpoints for deployment orchestration
 
 ### Data Architecture
-- **In-Memory Database**: Entity Framework Core with seeded sample data
+- **Flexible Database Support**: Entity Framework Core with multiple provider support (see [Database Setup Guide](DATABASE.md))
+- **Development**: In-Memory database with seeded sample data for rapid development
+- **Production**: PostgreSQL, SQL Server, SQLite, or MySQL with full migration support
 - **Multi-source Queries**: Support for both database queries and Git repository-based SQL files
 - **Role-based Access**: Hierarchical permissions through organizations and teams
 - **Git Integration**: External repository synchronization with automatic query file discovery
@@ -591,10 +628,15 @@ export AWS_SECRET_ACCESS_KEY=your-secret-key
   - [ ] Production secrets stored in managed secret store (Azure Key Vault, AWS Secrets Manager)
   - [ ] JWT secret key generated (minimum 256 bits)
   - [ ] All placeholder values replaced with production values
+- [ ] **Database Setup:**
+  - [ ] Production database server provisioned and configured
+  - [ ] Database schema deployed using Entity Framework migrations
+  - [ ] Database user created with appropriate permissions
+  - [ ] Connection strings tested and secured
+  - [ ] See [Database Setup Guide](DATABASE.md) for detailed instructions
 - [ ] **Infrastructure Preparation:**
   - [ ] Production server/container environment configured
   - [ ] HTTPS certificates installed and configured
-  - [ ] Database server configured (if using external database)
   - [ ] DNS records configured for production domain
 
 #### 2. Build and Package
