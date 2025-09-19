@@ -44,7 +44,7 @@ public class TeamsController : ControllerBase
 
         var teams = await _context.Teams
             .Where(t => t.IsActive && (
-                t.CreatedByUserId == currentUserId || 
+                t.CreatedByUserId == currentUserId ||
                 t.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive)
             ))
             .Include(t => t.CreatedByUser)
@@ -108,7 +108,7 @@ public class TeamsController : ControllerBase
         // Check if user has access to this team
         var isCreator = team.CreatedByUserId == currentUserId;
         var isMember = team.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive);
-        
+
         if (!isCreator && !isMember)
         {
             _logger.LogWarning("User {UserId} attempted to access team {TeamId} without permission", currentUserId, id);
@@ -284,7 +284,7 @@ public class TeamsController : ControllerBase
         // Check if user is administrator
         var isCreator = team.CreatedByUserId == currentUserId;
         var isAdmin = team.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive && tm.Role == TeamRole.Administrator);
-        
+
         if (!isCreator && !isAdmin)
         {
             _logger.LogWarning("User {UserId} attempted to update team {TeamId} without admin permission", currentUserId, id);
@@ -352,12 +352,12 @@ public class TeamsController : ControllerBase
 
         team.IsActive = false;
         team.UpdatedAt = DateTime.UtcNow;
-        
+
         // Also deactivate all team memberships
         var memberships = await _context.TeamMembers
             .Where(tm => tm.TeamId == id && tm.IsActive)
             .ToListAsync();
-        
+
         foreach (var membership in memberships)
         {
             membership.IsActive = false;
@@ -393,7 +393,7 @@ public class TeamsController : ControllerBase
         // Check if current user is administrator
         var isCreator = team.CreatedByUserId == currentUserId;
         var isAdmin = team.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive && tm.Role == TeamRole.Administrator);
-        
+
         if (!isCreator && !isAdmin)
         {
             return Forbid();
@@ -409,7 +409,7 @@ public class TeamsController : ControllerBase
         // Check if user is already a member
         var existingMembership = await _context.TeamMembers
             .FirstOrDefaultAsync(tm => tm.TeamId == id && tm.UserId == request.UserId && tm.IsActive);
-        
+
         if (existingMembership != null)
         {
             return BadRequest("User is already a member of this team");
@@ -485,7 +485,7 @@ public class TeamsController : ControllerBase
         var isCreator = team.CreatedByUserId == currentUserId;
         var isAdmin = team.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive && tm.Role == TeamRole.Administrator);
         var isSelf = currentUserId == userId;
-        
+
         if (!isCreator && !isAdmin && !isSelf)
         {
             return Forbid();
@@ -535,7 +535,7 @@ public class TeamsController : ControllerBase
         // Check if current user is administrator
         var isCreator = team.CreatedByUserId == currentUserId;
         var isAdmin = team.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive && tm.Role == TeamRole.Administrator);
-        
+
         if (!isCreator && !isAdmin)
         {
             return Forbid();
@@ -601,7 +601,7 @@ public class TeamsController : ControllerBase
         // Check if current user is administrator
         var isCreator = team.CreatedByUserId == currentUserId;
         var isAdmin = team.TeamMembers.Any(tm => tm.UserId == currentUserId && tm.IsActive && tm.Role == TeamRole.Administrator);
-        
+
         if (!isCreator && !isAdmin)
         {
             return Forbid();
@@ -656,10 +656,10 @@ public class CreateTeamRequest
     [Required]
     [MaxLength(100)]
     public string Name { get; set; } = string.Empty;
-    
+
     [MaxLength(500)]
     public string? Description { get; set; }
-    
+
     [Required]
     public int OrganizationId { get; set; }
 }
@@ -669,10 +669,10 @@ public class UpdateTeamRequest
     [Required]
     [MaxLength(100)]
     public string Name { get; set; } = string.Empty;
-    
+
     [MaxLength(500)]
     public string? Description { get; set; }
-    
+
     [Required]
     public int OrganizationId { get; set; }
 }
@@ -681,7 +681,7 @@ public class AddTeamMemberRequest
 {
     public int UserId { get; set; }
     public TeamRole Role { get; set; } = TeamRole.Member;
-    
+
     /// <summary>
     /// Optional specific permissions. If not provided, defaults to permissions based on Role
     /// </summary>

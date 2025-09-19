@@ -26,11 +26,11 @@ public class GitRepositoryService : IGitRepositoryService
     public async Task<List<GitQueryFile>> SyncRepositoryAsync(GitRepository repository)
     {
         _logger.LogInformation("Syncing repository {RepositoryUrl}", repository.RepositoryUrl);
-        
+
         try
         {
             var queryFiles = new List<GitQueryFile>();
-            
+
             // For now, we'll support GitHub repositories using the GitHub API
             if (repository.RepositoryUrl.Contains("github.com"))
             {
@@ -53,7 +53,7 @@ public class GitRepositoryService : IGitRepositoryService
     private async Task<List<GitQueryFile>> SyncGitHubRepositoryAsync(GitRepository repository)
     {
         var queryFiles = new List<GitQueryFile>();
-        
+
         // Extract owner and repo name from GitHub URL
         var (owner, repoName) = ParseGitHubUrl(repository.RepositoryUrl);
         if (string.IsNullOrEmpty(owner) || string.IsNullOrEmpty(repoName))
@@ -65,7 +65,7 @@ public class GitRepositoryService : IGitRepositoryService
         // Configure HTTP client for GitHub API
         _httpClient.DefaultRequestHeaders.Clear();
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "JoineryServer/1.0");
-        
+
         if (!string.IsNullOrEmpty(repository.AccessToken))
         {
             _httpClient.DefaultRequestHeaders.Add("Authorization", $"token {repository.AccessToken}");
@@ -88,7 +88,7 @@ public class GitRepositoryService : IGitRepositoryService
     {
         var branch = repository.Branch ?? "main";
         var url = $"https://api.github.com/repos/{owner}/{repoName}/contents/{path}?ref={branch}";
-        
+
         var response = await _httpClient.GetAsync(url);
         if (!response.IsSuccessStatusCode)
         {
@@ -163,7 +163,7 @@ public class GitRepositoryService : IGitRepositoryService
         {
             var url = $"https://api.github.com/repos/{owner}/{repoName}/commits?path={filePath}&sha={branch}&per_page=1";
             var response = await _httpClient.GetAsync(url);
-            
+
             if (!response.IsSuccessStatusCode) return null;
 
             var jsonContent = await response.Content.ReadAsStringAsync();
@@ -209,7 +209,7 @@ public class GitRepositoryService : IGitRepositoryService
     public async Task<List<GitQueryFile>> GetQueryFilesInFolderAsync(GitRepository repository, string folderPath = "")
     {
         var queryFiles = await SyncRepositoryAsync(repository);
-        
+
         if (string.IsNullOrEmpty(folderPath))
         {
             return queryFiles.Where(qf => !qf.FilePath.Contains("/")).ToList();
@@ -217,7 +217,7 @@ public class GitRepositoryService : IGitRepositoryService
 
         var normalizedFolderPath = folderPath.Replace("\\", "/").TrimEnd('/');
         return queryFiles
-            .Where(qf => 
+            .Where(qf =>
             {
                 var fileDir = Path.GetDirectoryName(qf.FilePath)?.Replace("\\", "/") ?? "";
                 return fileDir == normalizedFolderPath;
@@ -265,20 +265,20 @@ public class GitRepositoryService : IGitRepositoryService
     private static string? ExtractDatabaseTypeFromFileName(string fileName)
     {
         var lowerName = fileName.ToLowerInvariant();
-        
+
         if (lowerName.Contains("postgres") || lowerName.Contains("pg")) return "PostgreSQL";
         if (lowerName.Contains("mysql")) return "MySQL";
         if (lowerName.Contains("sqlserver") || lowerName.Contains("mssql")) return "SQLServer";
         if (lowerName.Contains("sqlite")) return "SQLite";
         if (lowerName.Contains("oracle")) return "Oracle";
-        
+
         return null;
     }
 
     private static List<string>? ExtractTagsFromContent(string content)
     {
         var tags = new List<string>();
-        
+
         // Look for comment patterns that might contain tags
         var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         foreach (var line in lines.Take(10)) // Only check first 10 lines for performance
@@ -294,7 +294,7 @@ public class GitRepositoryService : IGitRepositoryService
                 tags.AddRange(fileTags);
             }
         }
-        
+
         return tags.Any() ? tags : null;
     }
 

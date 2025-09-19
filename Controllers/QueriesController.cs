@@ -42,7 +42,7 @@ public class QueriesController : ControllerBase
     {
         var currentUserId = GetCurrentUserId();
         _logger.LogInformation("Getting all database queries for user {UserId}", currentUserId);
-        
+
         // Get traditional database queries
         var dbQueries = await _context.DatabaseQueries
             .Where(q => q.IsActive)
@@ -205,8 +205,8 @@ public class QueriesController : ControllerBase
 
         // Search traditional database queries
         var dbQueries = await _context.DatabaseQueries
-            .Where(q => q.IsActive && 
-                       (q.Name.Contains(searchTerm) || 
+            .Where(q => q.IsActive &&
+                       (q.Name.Contains(searchTerm) ||
                         q.Description != null && q.Description.Contains(searchTerm) ||
                         q.Tags != null && q.Tags.Any(t => t.Contains(searchTerm))))
             .Select(q => new
@@ -313,7 +313,7 @@ public class QueriesController : ControllerBase
     public async Task<ActionResult<IEnumerable<object>>> GetQueriesFromGitFolder(int repositoryId, [FromQuery] string folderPath = "")
     {
         var currentUserId = GetCurrentUserId();
-        _logger.LogInformation("Getting queries from Git repository {RepositoryId} folder '{FolderPath}' for user {UserId}", 
+        _logger.LogInformation("Getting queries from Git repository {RepositoryId} folder '{FolderPath}' for user {UserId}",
             repositoryId, folderPath, currentUserId);
 
         var repository = await _context.GitRepositories
@@ -386,7 +386,7 @@ public class QueriesController : ControllerBase
     public async Task<ActionResult<object>> GetQueryFileHistory(int repositoryId, [FromQuery] string filePath)
     {
         var currentUserId = GetCurrentUserId();
-        _logger.LogInformation("Getting history for file '{FilePath}' in repository {RepositoryId} for user {UserId}", 
+        _logger.LogInformation("Getting history for file '{FilePath}' in repository {RepositoryId} for user {UserId}",
             filePath, repositoryId, currentUserId);
 
         if (string.IsNullOrEmpty(filePath))
@@ -443,7 +443,7 @@ public class QueriesController : ControllerBase
 
         return Ok(history);
     }
-    
+
     /// <summary>
     /// Create a new database query (requires create permission for team queries)
     /// </summary>
@@ -512,18 +512,18 @@ public class CreateQueryRequest
     [Required]
     [MaxLength(200)]
     public string Name { get; set; } = string.Empty;
-    
+
     [Required]
     public string SqlQuery { get; set; } = string.Empty;
-    
+
     [MaxLength(1000)]
     public string? Description { get; set; }
-    
+
     [MaxLength(50)]
     public string? DatabaseType { get; set; }
-    
+
     public List<string>? Tags { get; set; }
-    
+
     /// <summary>
     /// Optional team ID if this query is associated with a team
     /// </summary>

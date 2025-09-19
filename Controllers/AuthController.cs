@@ -35,7 +35,7 @@ public class AuthController : ControllerBase
         {
             RedirectUri = "/api/auth/callback/github"
         };
-        
+
         return Challenge(properties, "GitHub");
     }
 
@@ -49,7 +49,7 @@ public class AuthController : ControllerBase
         {
             RedirectUri = "/api/auth/callback/microsoft"
         };
-        
+
         return Challenge(properties, "MicrosoftIdentityWebApp");
     }
 
@@ -62,7 +62,7 @@ public class AuthController : ControllerBase
         try
         {
             var authenticateResult = await HttpContext.AuthenticateAsync("GitHub");
-            
+
             if (!authenticateResult.Succeeded)
             {
                 _logger.LogWarning("GitHub authentication failed");
@@ -111,7 +111,7 @@ public class AuthController : ControllerBase
         try
         {
             var authenticateResult = await HttpContext.AuthenticateAsync("MicrosoftIdentityWebApp");
-            
+
             if (!authenticateResult.Succeeded)
             {
                 _logger.LogWarning("Microsoft authentication failed");
@@ -119,7 +119,7 @@ public class AuthController : ControllerBase
             }
 
             var claims = authenticateResult.Principal?.Claims.ToList() ?? new List<Claim>();
-            var microsoftId = claims.FirstOrDefault(c => c.Type == "oid")?.Value ?? 
+            var microsoftId = claims.FirstOrDefault(c => c.Type == "oid")?.Value ??
                              claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
             var username = claims.FirstOrDefault(c => c.Type == "preferred_username")?.Value ??
                           claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
@@ -181,9 +181,9 @@ public class AuthController : ControllerBase
 
         _context.Users.Add(newUser);
         await _context.SaveChangesAsync();
-        
+
         _logger.LogInformation("Created new user: {Username} via {AuthProvider}", username, authProvider);
-        
+
         return newUser;
     }
 

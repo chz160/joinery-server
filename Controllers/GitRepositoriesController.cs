@@ -186,11 +186,11 @@ public class GitRepositoriesController : ControllerBase
         if (request.OrganizationId.HasValue)
         {
             var hasOrgPermission = await _context.OrganizationMembers
-                .AnyAsync(om => om.OrganizationId == request.OrganizationId && 
-                               om.UserId == currentUserId && 
-                               om.IsActive && 
+                .AnyAsync(om => om.OrganizationId == request.OrganizationId &&
+                               om.UserId == currentUserId &&
+                               om.IsActive &&
                                om.Role == OrganizationRole.Administrator);
-            
+
             if (!hasOrgPermission)
             {
                 return Forbid("You must be an organization administrator to create organization-level repositories");
@@ -201,7 +201,7 @@ public class GitRepositoriesController : ControllerBase
         {
             // Check if user has manage folders permission
             var hasPermission = await _permissionService.HasPermissionAsync(currentUserId, request.TeamId, TeamPermission.ManageFolders);
-            
+
             if (!hasPermission)
             {
                 return Forbid("You must have folder management permission to create team-level repositories");
@@ -234,7 +234,7 @@ public class GitRepositoriesController : ControllerBase
             repository.LastSyncAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Successfully synced {FileCount} query files from repository {RepositoryId}", 
+            _logger.LogInformation("Successfully synced {FileCount} query files from repository {RepositoryId}",
                 queryFiles.Count, repository.Id);
         }
         catch (Exception ex)
