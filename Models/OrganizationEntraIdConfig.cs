@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace JoineryServer.Models;
 
-public class OrganizationAwsIamConfig
+public class OrganizationEntraIdConfig
 {
     public int Id { get; set; }
 
@@ -10,22 +10,19 @@ public class OrganizationAwsIamConfig
     public int OrganizationId { get; set; }
 
     [Required]
-    [MaxLength(100)]
-    public string AwsRegion { get; set; } = string.Empty;
+    [MaxLength(200)]
+    public string TenantId { get; set; } = string.Empty;
 
     [Required]
     [MaxLength(200)]
-    public string AccessKeyId { get; set; } = string.Empty;
+    public string ClientId { get; set; } = string.Empty;
 
     [Required]
     [MaxLength(500)]
-    public string SecretAccessKey { get; set; } = string.Empty;
-
-    [MaxLength(200)]
-    public string? RoleArn { get; set; }
+    public string ClientSecret { get; set; } = string.Empty;
 
     [MaxLength(100)]
-    public string? ExternalId { get; set; }
+    public string? Domain { get; set; }
 
     public bool IsActive { get; set; } = true;
 

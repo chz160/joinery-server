@@ -30,6 +30,9 @@ builder.Services.AddScoped<ITeamPermissionService, TeamPermissionService>();
 // Add AWS IAM service
 builder.Services.AddScoped<IAwsIamService, AwsIamService>();
 
+// Add Entra ID service
+builder.Services.AddScoped<IEntraIdService, EntraIdService>();
+
 // Configure authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

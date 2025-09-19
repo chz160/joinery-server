@@ -37,12 +37,12 @@ public class AwsIamService : IAwsIamService
         try
         {
             var regionEndpoint = RegionEndpoint.GetBySystemName(region);
-            
+
             if (!string.IsNullOrEmpty(roleArn))
             {
                 // Use STS to assume role
                 var stsClient = new AmazonSecurityTokenServiceClient(accessKeyId, secretAccessKey, regionEndpoint);
-                
+
                 var assumeRoleRequest = new AssumeRoleRequest
                 {
                     RoleArn = roleArn,
@@ -51,7 +51,7 @@ public class AwsIamService : IAwsIamService
                 };
 
                 var assumeRoleResponse = await stsClient.AssumeRoleAsync(assumeRoleRequest);
-                
+
                 // Use the temporary credentials to validate IAM access
                 var tempCredentials = assumeRoleResponse.Credentials;
                 var iamClient = new AmazonIdentityManagementServiceClient(
@@ -81,23 +81,23 @@ public class AwsIamService : IAwsIamService
     public async Task<List<AwsIamUser>> GetIamUsersAsync(OrganizationAwsIamConfig config)
     {
         var users = new List<AwsIamUser>();
-        
+
         try
         {
             var iamClient = await CreateIamClientAsync(config);
-            
+
             var request = new ListUsersRequest();
             ListUsersResponse? response = null;
-            
+
             do
             {
                 if (response != null)
                 {
                     request.Marker = response.Marker;
                 }
-                
+
                 response = await iamClient.ListUsersAsync(request);
-                
+
                 foreach (var user in response.Users)
                 {
                     var awsUser = new AwsIamUser
@@ -108,10 +108,10 @@ public class AwsIamService : IAwsIamService
                         Email = await GetUserEmailAsync(iamClient, user.UserName),
                         FullName = await GetUserFullNameAsync(iamClient, user.UserName)
                     };
-                    
+
                     users.Add(awsUser);
                 }
-                
+
             } while (response.IsTruncated);
         }
         catch (Exception ex)
@@ -119,7 +119,7 @@ public class AwsIamService : IAwsIamService
             _logger.LogError(ex, "Failed to get IAM users for organization {OrganizationId}", config.OrganizationId);
             throw;
         }
-        
+
         return users;
     }
 
@@ -128,10 +128,10 @@ public class AwsIamService : IAwsIamService
         try
         {
             var iamClient = await CreateIamClientAsync(config);
-            
+
             var response = await iamClient.GetUserAsync(new GetUserRequest { UserName = username });
             var user = response.User;
-            
+
             return new AwsIamUser
             {
                 Username = user.UserName,
@@ -155,15 +155,15 @@ public class AwsIamService : IAwsIamService
     private async Task<AmazonIdentityManagementServiceClient> CreateIamClientAsync(OrganizationAwsIamConfig config)
     {
         var regionEndpoint = RegionEndpoint.GetBySystemName(config.AwsRegion);
-        
+
         if (!string.IsNullOrEmpty(config.RoleArn))
         {
             // Use STS to assume role
             var stsClient = new AmazonSecurityTokenServiceClient(
-                config.AccessKeyId, 
-                config.SecretAccessKey, 
+                config.AccessKeyId,
+                config.SecretAccessKey,
                 regionEndpoint);
-            
+
             var assumeRoleRequest = new AssumeRoleRequest
             {
                 RoleArn = config.RoleArn,
@@ -173,7 +173,7 @@ public class AwsIamService : IAwsIamService
 
             var assumeRoleResponse = await stsClient.AssumeRoleAsync(assumeRoleRequest);
             var tempCredentials = assumeRoleResponse.Credentials;
-            
+
             return new AmazonIdentityManagementServiceClient(
                 tempCredentials.AccessKeyId,
                 tempCredentials.SecretAccessKey,
@@ -184,8 +184,8 @@ public class AwsIamService : IAwsIamService
         {
             // Direct IAM access
             return new AmazonIdentityManagementServiceClient(
-                config.AccessKeyId, 
-                config.SecretAccessKey, 
+                config.AccessKeyId,
+                config.SecretAccessKey,
                 regionEndpoint);
         }
     }

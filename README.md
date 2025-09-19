@@ -1,6 +1,6 @@
 # Joinery Server
 
-The server-side portion of Joinery - a platform for sharing and managing database queries. This ASP.NET Core Web API provides authentication via GitHub and Microsoft Entra ID, and offers read-only access to a shared repository of database queries.
+The server-side portion of Joinery - a platform for sharing and managing database queries. This ASP.NET Core Web API provides authentication via GitHub OAuth, Microsoft Entra ID, and AWS IAM, and offers read-only access to a shared repository of database queries.
 
 ## Recent Changes
 
@@ -33,9 +33,10 @@ The server-side portion of Joinery - a platform for sharing and managing databas
 
 - **Authentication**: GitHub OAuth, Microsoft Entra ID, and AWS IAM integration with JWT token-based security
 - **Multi-source Query Access**: Support for both database queries and Git repository-based SQL files
-- **Organization Management**: Create and manage organizations with role-based access control and AWS IAM integration
+- **Organization Management**: Create and manage organizations with role-based access control, AWS IAM, and Microsoft Entra ID integration
 - **Team Management**: Complete team lifecycle with administrator permissions and member roles
 - **AWS IAM Integration**: Import users from AWS IAM and enable authentication using AWS credentials
+- **Microsoft Entra ID Integration**: Organization-scoped Entra ID authentication with user import and domain filtering
 - **Git Repository Integration**: Connect and synchronize SQL queries from external Git repositories
 - **Advanced Permission System**: Granular permissions for query access and folder management
 - **RESTful API**: Clean, documented endpoints with comprehensive Swagger documentation
@@ -105,6 +106,38 @@ For organizations that want to use AWS IAM integration:
 3. For cross-account access, create a role with the above policy and note the Role ARN
 4. Organizations can configure AWS IAM integration through the API after creating their organization
 
+### 2d. Configure Microsoft Entra ID for Organizations (Optional)
+
+For organizations that want to use Microsoft Entra ID integration:
+
+1. **Create a new App Registration** (separate from the global Microsoft OAuth app):
+   - Go to Azure Portal > Microsoft Entra ID > App registrations
+   - Create a new registration with:
+     - Name: `Joinery Server - [Organization Name]`
+     - Supported account types: Accounts in this organizational directory only
+     - No redirect URI needed for this app registration
+
+2. **Configure API Permissions**:
+   - Add Microsoft Graph API permissions:
+     - `User.Read.All` (Application permission)
+     - `Organization.Read.All` (Application permission)  
+     - `Domain.Read.All` (Application permission)
+   - Grant admin consent for the permissions
+
+3. **Create Client Secret**:
+   - Go to "Certificates & secrets"
+   - Create a new client secret
+   - Copy the secret value (you won't be able to see it again)
+
+4. **Note Required Information**:
+   - **Tenant ID**: Found in the app registration overview
+   - **Client ID**: Application (client) ID from the app registration
+   - **Client Secret**: The secret you just created
+   - **Domain** (optional): Your organization's domain (e.g., "contoso.com") for user filtering
+
+5. **Organization Configuration**:
+   Organizations can configure Entra ID integration through the API after creating their organization.
+
 ### 3. Update Configuration
 
 Update `appsettings.Development.json` with your authentication credentials:
@@ -144,6 +177,7 @@ The application will start at:
 - `GET /api/auth/login/github` - Initiate GitHub OAuth login
 - `GET /api/auth/login/microsoft` - Initiate Microsoft OAuth login
 - `POST /api/auth/login/aws` - Authenticate with AWS IAM credentials
+- `POST /api/auth/login/entra-id` - Authenticate with Entra ID credentials for organization
 - `GET /api/auth/callback/github` - GitHub OAuth callback
 - `GET /api/auth/callback/microsoft` - Microsoft OAuth callback
 
@@ -192,6 +226,13 @@ The application will start at:
 - `DELETE /api/organizations/{id}/aws-iam/config` - Remove AWS IAM configuration (admins only)
 - `POST /api/organizations/{id}/aws-iam/import-users` - Import users from AWS IAM (admins only)
 
+### Microsoft Entra ID Integration (Authenticated)
+
+- `GET /api/organizations/{id}/entra-id/config` - Get Entra ID configuration for organization
+- `POST /api/organizations/{id}/entra-id/config` - Configure Entra ID for organization (admins only)
+- `DELETE /api/organizations/{id}/entra-id/config` - Remove Entra ID configuration (admins only)  
+- `POST /api/organizations/{id}/entra-id/import-users` - Import users from Entra ID (admins only)
+
 ### Health Checks
 
 - `GET /api/health` - Service health check with version and timestamp
@@ -203,15 +244,24 @@ The application will start at:
 Navigate to `/swagger` endpoint (e.g., `https://localhost:7050/swagger`) for interactive API documentation with JWT authentication support.
 
 ### 2. Authenticate  
-Use one of the login endpoints to authenticate via GitHub, Microsoft, or AWS IAM:
+Use one of the login endpoints to authenticate via GitHub, Microsoft, AWS IAM, or Entra ID:
 - GitHub: `GET /api/auth/login/github`
 - Microsoft: `GET /api/auth/login/microsoft`
 - AWS IAM: `POST /api/auth/login/aws` (requires organization setup)
+- Entra ID: `POST /api/auth/login/entra-id` (requires organization setup)
 
 For AWS IAM authentication, send a JSON request:
 ```json
 {
   "username": "your-aws-username",
+  "organizationName": "your-organization"
+}
+```
+
+For Entra ID authentication, send a JSON request:
+```json
+{
+  "userPrincipalName": "user@yourdomain.com",
   "organizationName": "your-organization"
 }
 ```
@@ -243,7 +293,23 @@ Organization administrators can configure AWS IAM integration to:
 3. Import users with `POST /api/organizations/{id}/aws-iam/import-users`
 4. Users can then authenticate using `POST /api/auth/login/aws`
 
-### 7. Git Repository Integration
+### 7. Microsoft Entra ID Integration
+Organization administrators can configure Microsoft Entra ID integration to:
+- Import existing Entra ID users as organization members
+- Allow Entra ID users to authenticate using their organizational credentials
+- Filter users by domain for multi-tenant scenarios
+- Automatically synchronize user information from Entra ID
+
+**To configure Entra ID for an organization:**
+1. Create an Entra ID app registration with required Microsoft Graph permissions
+2. Use `POST /api/organizations/{id}/entra-id/config` with tenant ID, client ID, and client secret
+3. Optionally specify a domain filter to restrict users to a specific domain
+4. Import users with `POST /api/organizations/{id}/entra-id/import-users`
+5. Users can then authenticate using `POST /api/auth/login/entra-id`
+
+**Note:** Organizations can only configure one authentication method (AWS IAM or Entra ID) at a time. To switch methods, first remove the existing configuration.
+
+### 8. Git Repository Integration
 - Connect external Git repositories containing SQL query files
 - Support for personal, team-level, and organization-level repository access
 - Automatic synchronization of query files from connected repositories

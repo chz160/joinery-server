@@ -16,6 +16,7 @@ public class JoineryDbContext : DbContext
     public DbSet<Organization> Organizations { get; set; }
     public DbSet<OrganizationMember> OrganizationMembers { get; set; }
     public DbSet<OrganizationAwsIamConfig> OrganizationAwsIamConfigs { get; set; }
+    public DbSet<OrganizationEntraIdConfig> OrganizationEntraIdConfigs { get; set; }
     public DbSet<GitRepository> GitRepositories { get; set; }
     public DbSet<GitQueryFile> GitQueryFiles { get; set; }
 
@@ -207,13 +208,33 @@ public class JoineryDbContext : DbContext
             entity.Property(e => e.SecretAccessKey).IsRequired().HasMaxLength(500);
             entity.Property(e => e.RoleArn).HasMaxLength(200);
             entity.Property(e => e.ExternalId).HasMaxLength(100);
-            
+
             // Relationship: OrganizationAwsIamConfig -> Organization
             entity.HasOne(e => e.Organization)
                   .WithOne()
                   .HasForeignKey<OrganizationAwsIamConfig>(e => e.OrganizationId)
                   .OnDelete(DeleteBehavior.Cascade);
-            
+
+            // Ensure unique configuration per organization
+            entity.HasIndex(e => e.OrganizationId).IsUnique();
+        });
+
+        // Configure OrganizationEntraIdConfig entity
+        modelBuilder.Entity<OrganizationEntraIdConfig>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.OrganizationId).IsRequired();
+            entity.Property(e => e.TenantId).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ClientId).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ClientSecret).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.Domain).HasMaxLength(100);
+
+            // Relationship: OrganizationEntraIdConfig -> Organization
+            entity.HasOne(e => e.Organization)
+                  .WithOne()
+                  .HasForeignKey<OrganizationEntraIdConfig>(e => e.OrganizationId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
             // Ensure unique configuration per organization
             entity.HasIndex(e => e.OrganizationId).IsUnique();
         });
