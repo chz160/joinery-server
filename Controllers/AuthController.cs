@@ -19,13 +19,15 @@ public class AuthController : ControllerBase
     private readonly JoineryDbContext _context;
     private readonly ILogger<AuthController> _logger;
     private readonly IAwsIamService _awsIamService;
+    private readonly IEntraIdService _entraIdService;
 
-    public AuthController(IConfiguration configuration, JoineryDbContext context, ILogger<AuthController> logger, IAwsIamService awsIamService)
+    public AuthController(IConfiguration configuration, JoineryDbContext context, ILogger<AuthController> logger, IAwsIamService awsIamService, IEntraIdService entraIdService)
     {
         _configuration = configuration;
         _context = context;
         _logger = logger;
         _awsIamService = awsIamService;
+        _entraIdService = entraIdService;
     }
 
     /// <summary>
@@ -230,6 +232,84 @@ public class AuthController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Authenticate with Entra ID credentials for a specific organization
+    /// </summary>
+    [HttpPost("login/entra-id")]
+    public async Task<IActionResult> LoginEntraId([FromBody] EntraIdLoginRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(request.UserPrincipalName) || string.IsNullOrEmpty(request.OrganizationName))
+            {
+                return BadRequest(new { message = "User principal name and organization name are required" });
+            }
+
+            // Find the organization and its Entra ID configuration
+            var organization = await _context.Organizations
+                .Include(o => o.OrganizationMembers)
+                .FirstOrDefaultAsync(o => o.Name == request.OrganizationName && o.IsActive);
+
+            if (organization == null)
+            {
+                return BadRequest(new { message = "Organization not found" });
+            }
+
+            var entraIdConfig = await _context.OrganizationEntraIdConfigs
+                .FirstOrDefaultAsync(c => c.OrganizationId == organization.Id && c.IsActive);
+
+            if (entraIdConfig == null)
+            {
+                return BadRequest(new { message = "Entra ID not configured for this organization" });
+            }
+
+            // Get the user from Entra ID
+            var entraIdUser = await _entraIdService.GetEntraIdUserAsync(entraIdConfig, request.UserPrincipalName);
+            if (entraIdUser == null)
+            {
+                return BadRequest(new { message = "User not found in Entra ID or not part of the configured domain" });
+            }
+
+            // Check if user exists in our system or create them
+            var fullName = $"{entraIdUser.GivenName} {entraIdUser.Surname}".Trim();
+            if (string.IsNullOrEmpty(fullName))
+            {
+                fullName = entraIdUser.DisplayName;
+            }
+
+            var user = await GetOrCreateUser(entraIdUser.UserId, entraIdUser.UserPrincipalName, entraIdUser.Email, "Microsoft", fullName);
+
+            // Verify the user is a member of this organization
+            var orgMember = await _context.OrganizationMembers
+                .FirstOrDefaultAsync(m => m.OrganizationId == organization.Id && m.UserId == user.Id);
+
+            if (orgMember == null)
+            {
+                return BadRequest(new { message = "User is not a member of this organization" });
+            }
+
+            var token = GenerateJwtToken(user);
+
+            return Ok(new
+            {
+                token,
+                user = new
+                {
+                    user.Id,
+                    user.Username,
+                    user.Email,
+                    user.FullName,
+                    user.AuthProvider
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during Entra ID authentication");
+            return StatusCode(500, new { message = "Internal server error during authentication" });
+        }
+    }
+
     private async Task<User> GetOrCreateUser(string externalId, string username, string email, string authProvider, string? fullName = null)
     {
         var existingUser = await _context.Users
@@ -296,5 +376,11 @@ public class AuthController : ControllerBase
 public class AwsLoginRequest
 {
     public string Username { get; set; } = string.Empty;
+    public string OrganizationName { get; set; } = string.Empty;
+}
+
+public class EntraIdLoginRequest
+{
+    public string UserPrincipalName { get; set; } = string.Empty;
     public string OrganizationName { get; set; } = string.Empty;
 }

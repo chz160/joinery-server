@@ -9,39 +9,39 @@ using JoineryServer.Services;
 namespace JoineryServer.Controllers;
 
 [ApiController]
-[Route("api/organizations/{organizationId}/aws-iam")]
+[Route("api/organizations/{organizationId}/entra-id")]
 [Authorize]
-public class AwsIamController : ControllerBase
+public class EntraIdController : ControllerBase
 {
     private readonly JoineryDbContext _context;
-    private readonly IAwsIamService _awsIamService;
-    private readonly ILogger<AwsIamController> _logger;
+    private readonly IEntraIdService _entraIdService;
+    private readonly ILogger<EntraIdController> _logger;
 
-    public AwsIamController(JoineryDbContext context, IAwsIamService awsIamService, ILogger<AwsIamController> logger)
+    public EntraIdController(JoineryDbContext context, IEntraIdService entraIdService, ILogger<EntraIdController> logger)
     {
         _context = context;
-        _awsIamService = awsIamService;
+        _entraIdService = entraIdService;
         _logger = logger;
     }
 
     /// <summary>
-    /// Get AWS IAM configuration for an organization
+    /// Get Entra ID configuration for an organization
     /// </summary>
     [HttpGet("config")]
-    public async Task<IActionResult> GetAwsIamConfig(int organizationId)
+    public async Task<IActionResult> GetEntraIdConfig(int organizationId)
     {
         var userId = GetCurrentUserId();
         if (!await IsOrganizationAdmin(organizationId, userId))
         {
-            return Forbid("Only organization administrators can view AWS IAM configuration");
+            return Forbid("Only organization administrators can view Entra ID configuration");
         }
 
-        var config = await _context.OrganizationAwsIamConfigs
+        var config = await _context.OrganizationEntraIdConfigs
             .FirstOrDefaultAsync(c => c.OrganizationId == organizationId && c.IsActive);
 
         if (config == null)
         {
-            return NotFound(new { message = "AWS IAM configuration not found" });
+            return NotFound(new { message = "Entra ID configuration not found" });
         }
 
         // Don't return sensitive data
@@ -49,11 +49,10 @@ public class AwsIamController : ControllerBase
         {
             config.Id,
             config.OrganizationId,
-            config.AwsRegion,
-            HasAccessKey = !string.IsNullOrEmpty(config.AccessKeyId),
-            HasSecretKey = !string.IsNullOrEmpty(config.SecretAccessKey),
-            config.RoleArn,
-            config.ExternalId,
+            config.TenantId,
+            config.ClientId,
+            HasClientSecret = !string.IsNullOrEmpty(config.ClientSecret),
+            config.Domain,
             config.IsActive,
             config.CreatedAt,
             config.UpdatedAt
@@ -61,15 +60,15 @@ public class AwsIamController : ControllerBase
     }
 
     /// <summary>
-    /// Configure AWS IAM for an organization
+    /// Configure Entra ID for an organization
     /// </summary>
     [HttpPost("config")]
-    public async Task<IActionResult> ConfigureAwsIam(int organizationId, [FromBody] AwsIamConfigRequest request)
+    public async Task<IActionResult> ConfigureEntraId(int organizationId, [FromBody] EntraIdConfigRequest request)
     {
         var userId = GetCurrentUserId();
         if (!await IsOrganizationAdmin(organizationId, userId))
         {
-            return Forbid("Only organization administrators can configure AWS IAM");
+            return Forbid("Only organization administrators can configure Entra ID");
         }
 
         // Validate the organization exists
@@ -80,125 +79,128 @@ public class AwsIamController : ControllerBase
         }
 
         // Check for existing authentication methods
-        var hasEntraIdConfig = await _context.OrganizationEntraIdConfigs
+        var hasAwsConfig = await _context.OrganizationAwsIamConfigs
             .AnyAsync(c => c.OrganizationId == organizationId && c.IsActive);
 
-        if (hasEntraIdConfig)
+        if (hasAwsConfig)
         {
-            return BadRequest(new { message = "Organization already has Entra ID authentication configured. Remove it before configuring AWS IAM." });
+            return BadRequest(new { message = "Organization already has AWS IAM authentication configured. Remove it before configuring Entra ID." });
         }
 
-        // Validate AWS credentials
-        var isValid = await _awsIamService.ValidateCredentialsAsync(
-            request.AccessKeyId,
-            request.SecretAccessKey,
-            request.AwsRegion,
-            request.RoleArn,
-            request.ExternalId);
+        // Validate Entra ID credentials
+        var isValid = await _entraIdService.ValidateCredentialsAsync(
+            request.TenantId,
+            request.ClientId,
+            request.ClientSecret,
+            request.Domain);
 
         if (!isValid)
         {
-            return BadRequest(new { message = "Invalid AWS credentials or insufficient permissions" });
+            return BadRequest(new { message = "Invalid Entra ID credentials or insufficient permissions" });
         }
 
         // Check if configuration already exists
-        var existingConfig = await _context.OrganizationAwsIamConfigs
+        var existingConfig = await _context.OrganizationEntraIdConfigs
             .FirstOrDefaultAsync(c => c.OrganizationId == organizationId);
 
         if (existingConfig != null)
         {
             // Update existing configuration
-            existingConfig.AwsRegion = request.AwsRegion;
-            existingConfig.AccessKeyId = request.AccessKeyId;
-            existingConfig.SecretAccessKey = request.SecretAccessKey;
-            existingConfig.RoleArn = request.RoleArn;
-            existingConfig.ExternalId = request.ExternalId;
+            existingConfig.TenantId = request.TenantId;
+            existingConfig.ClientId = request.ClientId;
+            existingConfig.ClientSecret = request.ClientSecret;
+            existingConfig.Domain = request.Domain;
             existingConfig.IsActive = true;
             existingConfig.UpdatedAt = DateTime.UtcNow;
         }
         else
         {
             // Create new configuration
-            var newConfig = new OrganizationAwsIamConfig
+            var newConfig = new OrganizationEntraIdConfig
             {
                 OrganizationId = organizationId,
-                AwsRegion = request.AwsRegion,
-                AccessKeyId = request.AccessKeyId,
-                SecretAccessKey = request.SecretAccessKey,
-                RoleArn = request.RoleArn,
-                ExternalId = request.ExternalId,
+                TenantId = request.TenantId,
+                ClientId = request.ClientId,
+                ClientSecret = request.ClientSecret,
+                Domain = request.Domain,
                 IsActive = true
             };
-            _context.OrganizationAwsIamConfigs.Add(newConfig);
+            _context.OrganizationEntraIdConfigs.Add(newConfig);
         }
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("AWS IAM configuration updated for organization {OrganizationId} by user {UserId}",
+        _logger.LogInformation("Entra ID configuration updated for organization {OrganizationId} by user {UserId}",
             organizationId, userId);
 
-        return Ok(new { message = "AWS IAM configuration saved successfully" });
+        return Ok(new { message = "Entra ID configuration saved successfully" });
     }
 
     /// <summary>
-    /// Remove AWS IAM configuration for an organization
+    /// Remove Entra ID configuration for an organization
     /// </summary>
     [HttpDelete("config")]
-    public async Task<IActionResult> RemoveAwsIamConfig(int organizationId)
+    public async Task<IActionResult> RemoveEntraIdConfig(int organizationId)
     {
         var userId = GetCurrentUserId();
         if (!await IsOrganizationAdmin(organizationId, userId))
         {
-            return Forbid("Only organization administrators can remove AWS IAM configuration");
+            return Forbid("Only organization administrators can remove Entra ID configuration");
         }
 
-        var config = await _context.OrganizationAwsIamConfigs
+        var config = await _context.OrganizationEntraIdConfigs
             .FirstOrDefaultAsync(c => c.OrganizationId == organizationId && c.IsActive);
 
         if (config == null)
         {
-            return NotFound(new { message = "AWS IAM configuration not found" });
+            return NotFound(new { message = "Entra ID configuration not found" });
         }
 
         config.IsActive = false;
         config.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("AWS IAM configuration removed for organization {OrganizationId} by user {UserId}",
+        _logger.LogInformation("Entra ID configuration removed for organization {OrganizationId} by user {UserId}",
             organizationId, userId);
 
-        return Ok(new { message = "AWS IAM configuration removed successfully" });
+        return Ok(new { message = "Entra ID configuration removed successfully" });
     }
 
     /// <summary>
-    /// Import users from AWS IAM
+    /// Import users from Entra ID
     /// </summary>
     [HttpPost("import-users")]
-    public async Task<IActionResult> ImportUsersFromAws(int organizationId)
+    public async Task<IActionResult> ImportUsersFromEntraId(int organizationId)
     {
         var userId = GetCurrentUserId();
         if (!await IsOrganizationAdmin(organizationId, userId))
         {
-            return Forbid("Only organization administrators can import users from AWS IAM");
+            return Forbid("Only organization administrators can import users from Entra ID");
         }
 
-        var config = await _context.OrganizationAwsIamConfigs
+        var config = await _context.OrganizationEntraIdConfigs
             .FirstOrDefaultAsync(c => c.OrganizationId == organizationId && c.IsActive);
 
         if (config == null)
         {
-            return BadRequest(new { message = "AWS IAM configuration not found" });
+            return BadRequest(new { message = "Entra ID configuration not found" });
         }
 
         try
         {
-            var awsUsers = await _awsIamService.GetIamUsersAsync(config);
+            var entraIdUsers = await _entraIdService.GetEntraIdUsersAsync(config);
             var importedUsers = new List<object>();
 
-            foreach (var awsUser in awsUsers)
+            foreach (var entraIdUser in entraIdUsers)
             {
                 // Create or update user in our system
-                var user = await GetOrCreateUser(awsUser.UserId, awsUser.Username, awsUser.Email, "AWS", awsUser.FullName);
+                var fullName = $"{entraIdUser.GivenName} {entraIdUser.Surname}".Trim();
+                if (string.IsNullOrEmpty(fullName))
+                {
+                    fullName = entraIdUser.DisplayName;
+                }
+
+                var user = await GetOrCreateUser(entraIdUser.UserId, entraIdUser.UserPrincipalName, entraIdUser.Email, "Microsoft", fullName);
 
                 // Add user to organization if not already a member
                 var existingMember = await _context.OrganizationMembers
@@ -228,19 +230,19 @@ public class AwsIamController : ControllerBase
 
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Imported {UserCount} users from AWS IAM for organization {OrganizationId}",
-                awsUsers.Count, organizationId);
+            _logger.LogInformation("Imported {UserCount} users from Entra ID for organization {OrganizationId}",
+                entraIdUsers.Count, organizationId);
 
             return Ok(new
             {
-                message = $"Successfully imported {awsUsers.Count} users from AWS IAM",
+                message = $"Successfully imported {entraIdUsers.Count} users from Entra ID",
                 importedUsers
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to import users from AWS IAM for organization {OrganizationId}", organizationId);
-            return StatusCode(500, new { message = "Failed to import users from AWS IAM" });
+            _logger.LogError(ex, "Failed to import users from Entra ID for organization {OrganizationId}", organizationId);
+            return StatusCode(500, new { message = "Failed to import users from Entra ID" });
         }
     }
 
@@ -291,11 +293,10 @@ public class AwsIamController : ControllerBase
     }
 }
 
-public class AwsIamConfigRequest
+public class EntraIdConfigRequest
 {
-    public string AwsRegion { get; set; } = string.Empty;
-    public string AccessKeyId { get; set; } = string.Empty;
-    public string SecretAccessKey { get; set; } = string.Empty;
-    public string? RoleArn { get; set; }
-    public string? ExternalId { get; set; }
+    public string TenantId { get; set; } = string.Empty;
+    public string ClientId { get; set; } = string.Empty;
+    public string ClientSecret { get; set; } = string.Empty;
+    public string? Domain { get; set; }
 }
