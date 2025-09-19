@@ -207,13 +207,13 @@ public class JoineryDbContext : DbContext
             entity.Property(e => e.SecretAccessKey).IsRequired().HasMaxLength(500);
             entity.Property(e => e.RoleArn).HasMaxLength(200);
             entity.Property(e => e.ExternalId).HasMaxLength(100);
-            
+
             // Relationship: OrganizationAwsIamConfig -> Organization
             entity.HasOne(e => e.Organization)
                   .WithOne()
                   .HasForeignKey<OrganizationAwsIamConfig>(e => e.OrganizationId)
                   .OnDelete(DeleteBehavior.Cascade);
-            
+
             // Ensure unique configuration per organization
             entity.HasIndex(e => e.OrganizationId).IsUnique();
         });

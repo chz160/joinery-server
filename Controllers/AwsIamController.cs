@@ -81,8 +81,8 @@ public class AwsIamController : ControllerBase
 
         // Validate AWS credentials
         var isValid = await _awsIamService.ValidateCredentialsAsync(
-            request.AccessKeyId, 
-            request.SecretAccessKey, 
+            request.AccessKeyId,
+            request.SecretAccessKey,
             request.AwsRegion,
             request.RoleArn,
             request.ExternalId);
@@ -125,7 +125,7 @@ public class AwsIamController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("AWS IAM configuration updated for organization {OrganizationId} by user {UserId}", 
+        _logger.LogInformation("AWS IAM configuration updated for organization {OrganizationId} by user {UserId}",
             organizationId, userId);
 
         return Ok(new { message = "AWS IAM configuration saved successfully" });
@@ -155,7 +155,7 @@ public class AwsIamController : ControllerBase
         config.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("AWS IAM configuration removed for organization {OrganizationId} by user {UserId}", 
+        _logger.LogInformation("AWS IAM configuration removed for organization {OrganizationId} by user {UserId}",
             organizationId, userId);
 
         return Ok(new { message = "AWS IAM configuration removed successfully" });
@@ -219,7 +219,7 @@ public class AwsIamController : ControllerBase
 
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Imported {UserCount} users from AWS IAM for organization {OrganizationId}", 
+            _logger.LogInformation("Imported {UserCount} users from AWS IAM for organization {OrganizationId}",
                 awsUsers.Count, organizationId);
 
             return Ok(new
@@ -244,8 +244,8 @@ public class AwsIamController : ControllerBase
     private async Task<bool> IsOrganizationAdmin(int organizationId, int userId)
     {
         return await _context.OrganizationMembers
-            .AnyAsync(m => m.OrganizationId == organizationId && 
-                          m.UserId == userId && 
+            .AnyAsync(m => m.OrganizationId == organizationId &&
+                          m.UserId == userId &&
                           m.Role == OrganizationRole.Administrator);
     }
 
