@@ -20,14 +20,22 @@ public class AuthController : ControllerBase
     private readonly ILogger<AuthController> _logger;
     private readonly IAwsIamService _awsIamService;
     private readonly IEntraIdService _entraIdService;
+    private readonly IGitHubAuthService _gitHubAuthService;
+    private readonly IUserService _userService;
+    private readonly ITokenService _tokenService;
+    private readonly IRateLimitingService _rateLimitingService;
 
-    public AuthController(IConfiguration configuration, JoineryDbContext context, ILogger<AuthController> logger, IAwsIamService awsIamService, IEntraIdService entraIdService)
+    public AuthController(IConfiguration configuration, JoineryDbContext context, ILogger<AuthController> logger, IAwsIamService awsIamService, IEntraIdService entraIdService, IGitHubAuthService gitHubAuthService, IUserService userService, ITokenService tokenService, IRateLimitingService rateLimitingService)
     {
         _configuration = configuration;
         _context = context;
         _logger = logger;
         _awsIamService = awsIamService;
         _entraIdService = entraIdService;
+        _gitHubAuthService = gitHubAuthService;
+        _userService = userService;
+        _tokenService = tokenService;
+        _rateLimitingService = rateLimitingService;
     }
 
     /// <summary>
@@ -36,26 +44,25 @@ public class AuthController : ControllerBase
     [HttpGet("login/github")]
     public IActionResult LoginGitHub()
     {
+        // Rate limiting check
+        var clientId = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        if (!_rateLimitingService.IsAllowed(clientId, "auth/login/github"))
+        {
+            return StatusCode(429, new { message = "Rate limit exceeded" });
+        }
+
+        // Generate state parameter for CSRF protection
+        var state = _gitHubAuthService.GenerateState();
+
         var properties = new AuthenticationProperties
         {
             RedirectUri = "/api/auth/callback/github"
         };
 
+        // Store state in authentication properties for validation
+        properties.Items["state"] = state;
+
         return Challenge(properties, "GitHub");
-    }
-
-    /// <summary>
-    /// Initiate Microsoft OAuth authentication
-    /// </summary>
-    [HttpGet("login/microsoft")]
-    public IActionResult LoginMicrosoft()
-    {
-        var properties = new AuthenticationProperties
-        {
-            RedirectUri = "/api/auth/callback/microsoft"
-        };
-
-        return Challenge(properties, "MicrosoftIdentityWebApp");
     }
 
     /// <summary>
@@ -74,6 +81,18 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "GitHub authentication failed" });
             }
 
+            // Validate state parameter for CSRF protection
+            var storedState = authenticateResult.Properties?.Items.ContainsKey("state") == true
+                ? authenticateResult.Properties.Items["state"]
+                : null;
+            var receivedState = HttpContext.Request.Query["state"].ToString();
+
+            if (!_gitHubAuthService.ValidateState(storedState ?? "", receivedState))
+            {
+                _logger.LogWarning("Invalid state parameter received in GitHub callback");
+                return BadRequest(new { message = "Invalid authentication state" });
+            }
+
             var claims = authenticateResult.Principal?.Claims.ToList() ?? new List<Claim>();
             var githubId = claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
             var username = claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
@@ -84,12 +103,16 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "Unable to get GitHub user information" });
             }
 
-            var user = await GetOrCreateUser(githubId, username ?? "unknown", email ?? "unknown@github.com", "GitHub");
-            var token = GenerateJwtToken(user);
+            var user = await _userService.GetOrCreateUserAsync(githubId, username ?? "unknown", email ?? "unknown@github.com", "GitHub");
+            var token = _tokenService.GenerateAccessToken(user);
+            var refreshToken = _tokenService.GenerateRefreshToken();
 
             return Ok(new
             {
-                token,
+                access_token = token,
+                refresh_token = refreshToken,
+                token_type = "Bearer",
+                expires_in = _configuration.GetSection("JWT")["ExpirationHours"] != null ? int.Parse(_configuration.GetSection("JWT")["ExpirationHours"]!) * 3600 : 24 * 3600,
                 user = new
                 {
                     user.Id,
@@ -105,6 +128,58 @@ public class AuthController : ControllerBase
             _logger.LogError(ex, "Error during GitHub callback");
             return StatusCode(500, new { message = "Internal server error during authentication" });
         }
+    }
+
+    /// <summary>
+    /// Refresh access token using refresh token
+    /// </summary>
+    [HttpPost("refresh")]
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(request.RefreshToken))
+            {
+                return BadRequest(new { message = "Refresh token is required" });
+            }
+
+            var newAccessToken = await _tokenService.RefreshAccessTokenAsync(request.RefreshToken);
+            if (newAccessToken == null)
+            {
+                return BadRequest(new { message = "Invalid or expired refresh token" });
+            }
+
+            // Generate new refresh token (token rotation)
+            await _tokenService.RevokeRefreshTokenAsync(request.RefreshToken);
+            var newRefreshToken = _tokenService.GenerateRefreshToken();
+
+            return Ok(new
+            {
+                access_token = newAccessToken,
+                refresh_token = newRefreshToken,
+                token_type = "Bearer",
+                expires_in = _configuration.GetSection("JWT")["ExpirationHours"] != null ? int.Parse(_configuration.GetSection("JWT")["ExpirationHours"]!) * 3600 : 24 * 3600
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during token refresh");
+            return StatusCode(500, new { message = "Internal server error during token refresh" });
+        }
+    }
+
+    /// <summary>
+    /// Initiate Microsoft OAuth authentication
+    /// </summary>
+    [HttpGet("login/microsoft")]
+    public IActionResult LoginMicrosoft()
+    {
+        var properties = new AuthenticationProperties
+        {
+            RedirectUri = "/api/auth/callback/microsoft"
+        };
+
+        return Challenge(properties, "MicrosoftIdentityWebApp");
     }
 
     /// <summary>
@@ -137,8 +212,8 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "Unable to get Microsoft user information" });
             }
 
-            var user = await GetOrCreateUser(microsoftId, username ?? "unknown", email ?? "unknown@microsoft.com", "Microsoft", fullName?.Trim());
-            var token = GenerateJwtToken(user);
+            var user = await _userService.GetOrCreateUserAsync(microsoftId, username ?? "unknown", email ?? "unknown@microsoft.com", "Microsoft", fullName?.Trim());
+            var token = _tokenService.GenerateAccessToken(user);
 
             return Ok(new
             {
@@ -199,7 +274,7 @@ public class AuthController : ControllerBase
             }
 
             // Check if user exists in our system or create them
-            var user = await GetOrCreateUser(awsUser.UserId, awsUser.Username, awsUser.Email, "AWS", awsUser.FullName);
+            var user = await _userService.GetOrCreateUserAsync(awsUser.UserId, awsUser.Username, awsUser.Email, "AWS", awsUser.FullName);
 
             // Verify the user is a member of this organization
             var orgMember = await _context.OrganizationMembers
@@ -210,7 +285,7 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "User is not a member of this organization" });
             }
 
-            var token = GenerateJwtToken(user);
+            var token = _tokenService.GenerateAccessToken(user);
 
             return Ok(new
             {
@@ -277,7 +352,7 @@ public class AuthController : ControllerBase
                 fullName = entraIdUser.DisplayName;
             }
 
-            var user = await GetOrCreateUser(entraIdUser.UserId, entraIdUser.UserPrincipalName, entraIdUser.Email, "Microsoft", fullName);
+            var user = await _userService.GetOrCreateUserAsync(entraIdUser.UserId, entraIdUser.UserPrincipalName, entraIdUser.Email, "Microsoft", fullName);
 
             // Verify the user is a member of this organization
             var orgMember = await _context.OrganizationMembers
@@ -288,7 +363,7 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "User is not a member of this organization" });
             }
 
-            var token = GenerateJwtToken(user);
+            var token = _tokenService.GenerateAccessToken(user);
 
             return Ok(new
             {
@@ -309,68 +384,11 @@ public class AuthController : ControllerBase
             return StatusCode(500, new { message = "Internal server error during authentication" });
         }
     }
+}
 
-    private async Task<User> GetOrCreateUser(string externalId, string username, string email, string authProvider, string? fullName = null)
-    {
-        var existingUser = await _context.Users
-            .FirstOrDefaultAsync(u => u.ExternalId == externalId && u.AuthProvider == authProvider);
-
-        if (existingUser != null)
-        {
-            existingUser.LastLoginAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
-            return existingUser;
-        }
-
-        var newUser = new User
-        {
-            Username = username,
-            Email = email,
-            FullName = fullName,
-            AuthProvider = authProvider,
-            ExternalId = externalId,
-            CreatedAt = DateTime.UtcNow,
-            LastLoginAt = DateTime.UtcNow,
-            IsActive = true
-        };
-
-        _context.Users.Add(newUser);
-        await _context.SaveChangesAsync();
-
-        _logger.LogInformation("Created new user: {Username} via {AuthProvider}", username, authProvider);
-
-        return newUser;
-    }
-
-    private string GenerateJwtToken(User user)
-    {
-        var jwtConfig = _configuration.GetSection("JWT");
-        var secretKey = jwtConfig["SecretKey"] ?? "default-secret-key";
-        var issuer = jwtConfig["Issuer"] ?? "JoineryServer";
-        var audience = jwtConfig["Audience"] ?? "JoineryClients";
-        var expirationHours = int.Parse(jwtConfig["ExpirationHours"] ?? "24");
-
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(ClaimTypes.Name, user.Username),
-            new Claim(ClaimTypes.Email, user.Email),
-            new Claim("auth_provider", user.AuthProvider),
-            new Claim("external_id", user.ExternalId)
-        };
-
-        var token = new JwtSecurityToken(
-            issuer: issuer,
-            audience: audience,
-            claims: claims,
-            expires: DateTime.Now.AddHours(expirationHours),
-            signingCredentials: creds);
-
-        return new JwtSecurityTokenHandler().WriteToken(token);
-    }
+public class RefreshTokenRequest
+{
+    public string RefreshToken { get; set; } = string.Empty;
 }
 
 public class AwsLoginRequest
