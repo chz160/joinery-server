@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -105,14 +106,14 @@ public class AuthController : ControllerBase
 
             var user = await _userService.GetOrCreateUserAsync(githubId, username ?? "unknown", email ?? "unknown@github.com", "GitHub");
             var token = _tokenService.GenerateAccessToken(user);
-            var refreshToken = _tokenService.GenerateRefreshToken();
+            var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user.Id);
 
             return Ok(new
             {
                 access_token = token,
-                refresh_token = refreshToken,
+                refresh_token = refreshToken.Token,
                 token_type = "Bearer",
-                expires_in = _configuration.GetSection("JWT")["ExpirationHours"] != null ? int.Parse(_configuration.GetSection("JWT")["ExpirationHours"]!) * 3600 : 24 * 3600,
+                expires_in = _configuration.GetSection("JWT")["AccessTokenExpirationMinutes"] != null ? int.Parse(_configuration.GetSection("JWT")["AccessTokenExpirationMinutes"]!) * 60 : 15 * 60,
                 user = new
                 {
                     user.Id,
@@ -143,28 +144,82 @@ public class AuthController : ControllerBase
                 return BadRequest(new { message = "Refresh token is required" });
             }
 
-            var newAccessToken = await _tokenService.RefreshAccessTokenAsync(request.RefreshToken);
-            if (newAccessToken == null)
+            var (newAccessToken, userId) = await _tokenService.RefreshAccessTokenAsync(request.RefreshToken);
+            if (newAccessToken == null || userId == null)
             {
                 return BadRequest(new { message = "Invalid or expired refresh token" });
             }
 
             // Generate new refresh token (token rotation)
             await _tokenService.RevokeRefreshTokenAsync(request.RefreshToken);
-            var newRefreshToken = _tokenService.GenerateRefreshToken();
+            var newRefreshToken = await _tokenService.GenerateRefreshTokenAsync(userId.Value);
 
             return Ok(new
             {
                 access_token = newAccessToken,
-                refresh_token = newRefreshToken,
+                refresh_token = newRefreshToken.Token,
                 token_type = "Bearer",
-                expires_in = _configuration.GetSection("JWT")["ExpirationHours"] != null ? int.Parse(_configuration.GetSection("JWT")["ExpirationHours"]!) * 3600 : 24 * 3600
+                expires_in = _configuration.GetSection("JWT")["AccessTokenExpirationMinutes"] != null ? int.Parse(_configuration.GetSection("JWT")["AccessTokenExpirationMinutes"]!) * 60 : 15 * 60
             });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during token refresh");
             return StatusCode(500, new { message = "Internal server error during token refresh" });
+        }
+    }
+
+    /// <summary>
+    /// Revoke all refresh tokens for the current user
+    /// </summary>
+    [HttpPost("revoke-all")]
+    [Authorize]
+    public async Task<IActionResult> RevokeAllTokens()
+    {
+        try
+        {
+            // Get user ID from JWT claims
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+            {
+                return Unauthorized(new { message = "Invalid user token" });
+            }
+
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _tokenService.RevokeAllUserTokensAsync(userId, "User requested revocation", clientIp);
+
+            _logger.LogInformation("All tokens revoked for user {UserId}", userId);
+            return Ok(new { message = "All tokens have been revoked successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during token revocation");
+            return StatusCode(500, new { message = "Internal server error during token revocation" });
+        }
+    }
+
+    /// <summary>
+    /// Revoke a specific refresh token
+    /// </summary>
+    [HttpPost("revoke")]
+    public async Task<IActionResult> RevokeToken([FromBody] RefreshTokenRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(request.RefreshToken))
+            {
+                return BadRequest(new { message = "Refresh token is required" });
+            }
+
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _tokenService.RevokeRefreshTokenAsync(request.RefreshToken, "User requested revocation", clientIp);
+
+            return Ok(new { message = "Token revoked successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during token revocation");
+            return StatusCode(500, new { message = "Internal server error during token revocation" });
         }
     }
 

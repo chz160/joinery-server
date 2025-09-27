@@ -149,6 +149,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
+app.UseMiddleware<JoineryServer.Middleware.JwtValidationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
