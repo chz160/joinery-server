@@ -33,6 +33,12 @@ builder.Services.AddScoped<IAwsIamService, AwsIamService>();
 // Add Entra ID service
 builder.Services.AddScoped<IEntraIdService, EntraIdService>();
 
+// Add authentication services
+builder.Services.AddScoped<IGitHubAuthService, GitHubAuthService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IConfigService, ConfigService>();
+
 // Configure authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -56,6 +62,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.ClientSecret = githubConfig["ClientSecret"] ?? "";
         options.CallbackPath = "/signin-github";
         options.Scope.Add("user:email");
+        // Ensure secure token transmission
+        options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.CorrelationCookie.SameSite = SameSiteMode.None;
     })
     .AddMicrosoftIdentityWebApp(builder.Configuration.GetSection("Authentication:Microsoft"));
 
@@ -111,6 +120,9 @@ builder.Services.AddCors(options =>
                    .AllowAnyHeader();
         });
 });
+
+// Add rate limiting service (simple in-memory implementation)
+builder.Services.AddSingleton<IRateLimitingService, RateLimitingService>();
 
 var app = builder.Build();
 
