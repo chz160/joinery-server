@@ -21,6 +21,7 @@ public class JoineryDbContext : DbContext
     public DbSet<GitQueryFile> GitQueryFiles { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<BlacklistedToken> BlacklistedTokens { get; set; }
+    public DbSet<Session> Sessions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -280,6 +281,34 @@ public class JoineryDbContext : DbContext
             // Index for faster token hash lookups
             entity.HasIndex(e => e.TokenHash).IsUnique();
             entity.HasIndex(e => e.ExpiresAt);
+        });
+
+        // Configure Session entity
+        modelBuilder.Entity<Session>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SessionId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.DeviceInfo).HasMaxLength(200);
+            entity.Property(e => e.IpAddress).HasMaxLength(100);
+            entity.Property(e => e.UserAgent).HasMaxLength(500);
+            entity.Property(e => e.RevokedReason).HasMaxLength(500);
+            entity.Property(e => e.RevokedByIp).HasMaxLength(100);
+            entity.Property(e => e.LoginMethod).HasMaxLength(50);
+            entity.Property(e => e.Location).HasMaxLength(100);
+            entity.Property(e => e.SuspiciousReasons).HasMaxLength(1000);
+
+            // Relationship: Session -> User
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // Indexes for performance
+            entity.HasIndex(e => e.SessionId).IsUnique();
+            entity.HasIndex(e => new { e.UserId, e.IsActive });
+            entity.HasIndex(e => e.ExpiresAt);
+            entity.HasIndex(e => e.LastActivityAt);
         });
 
         // Seed data for development

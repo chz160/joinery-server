@@ -5,6 +5,7 @@ namespace JoineryServer.Services;
 public interface ITokenService
 {
     string GenerateAccessToken(User user);
+    string GenerateAccessToken(User user, string sessionId);
     Task<RefreshToken> GenerateRefreshTokenAsync(int userId);
     bool ValidateRefreshToken(string refreshToken);
     Task<(string? AccessToken, int? UserId)> RefreshAccessTokenAsync(string refreshToken);

@@ -24,6 +24,11 @@ public class TokenService : ITokenService
 
     public string GenerateAccessToken(User user)
     {
+        return GenerateAccessToken(user, null);
+    }
+
+    public string GenerateAccessToken(User user, string? sessionId)
+    {
         var secretKey = _configService.GetJwtSecretKey();
         var issuer = _configService.GetJwtIssuer();
         var audience = _configService.GetJwtAudience();
@@ -32,7 +37,7 @@ public class TokenService : ITokenService
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claimsList = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new Claim(ClaimTypes.Name, user.Username),
@@ -42,10 +47,16 @@ public class TokenService : ITokenService
             new Claim("user_version", "1") // For token versioning
         };
 
+        // Add session ID if provided
+        if (!string.IsNullOrEmpty(sessionId))
+        {
+            claimsList.Add(new Claim("session_id", sessionId));
+        }
+
         var token = new JwtSecurityToken(
             issuer: issuer,
             audience: audience,
-            claims: claims,
+            claims: claimsList,
             expires: DateTime.UtcNow.AddMinutes(expirationMinutes),
             signingCredentials: creds);
 

@@ -39,6 +39,11 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IConfigService, ConfigService>();
 
+// Add session management services
+builder.Services.AddScoped<ISessionRepository, SessionRepository>();
+builder.Services.AddScoped<ISessionService, SessionService>();
+builder.Services.AddHostedService<SessionCleanupService>();
+
 // Configure authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -150,6 +155,7 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseMiddleware<JoineryServer.Middleware.JwtValidationMiddleware>();
+app.UseMiddleware<JoineryServer.Middleware.SessionValidationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();
