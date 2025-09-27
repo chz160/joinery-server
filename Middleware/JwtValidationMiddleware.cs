@@ -19,7 +19,7 @@ public class JwtValidationMiddleware
     public async Task InvokeAsync(HttpContext context, ITokenService tokenService)
     {
         // Skip validation for non-authenticated endpoints
-        if (!context.Request.Path.StartsWithSegments("/api") || 
+        if (!context.Request.Path.StartsWithSegments("/api") ||
             context.Request.Path.StartsWithSegments("/api/auth") ||
             context.Request.Path.StartsWithSegments("/api/health"))
         {
@@ -28,7 +28,7 @@ public class JwtValidationMiddleware
         }
 
         var token = ExtractTokenFromHeader(context.Request);
-        
+
         if (!string.IsNullOrEmpty(token))
         {
             try
@@ -80,7 +80,7 @@ public class JwtValidationMiddleware
             }
 
             var jwtToken = tokenHandler.ReadJwtToken(token);
-            
+
             // Check if token has expired (additional check)
             if (jwtToken.ValidTo < DateTime.UtcNow)
             {

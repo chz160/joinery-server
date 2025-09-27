@@ -168,7 +168,7 @@ public class TokenService : ITokenService
             return true;
 
         var tokenHash = GetTokenHash(token);
-        
+
         var blacklistedToken = await _context.BlacklistedTokens
             .FirstOrDefaultAsync(bt => bt.TokenHash == tokenHash && bt.TokenType == tokenType);
 
@@ -181,7 +181,7 @@ public class TokenService : ITokenService
             return;
 
         var tokenHash = GetTokenHash(token);
-        
+
         // Check if already blacklisted
         var existingBlacklist = await _context.BlacklistedTokens
             .FirstOrDefaultAsync(bt => bt.TokenHash == tokenHash && bt.TokenType == tokenType);
