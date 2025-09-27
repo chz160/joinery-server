@@ -60,3 +60,46 @@ JoineryServer.csproj.user
 
 # Output directory
 out/
+publish/
+
+# Production deployment files (not templates)
+appsettings.Production.json
+
+# ====================
+# SECURITY: Sensitive Configuration Files
+# ====================
+# Local configuration files with real credentials (rename from templates)
+appsettings.Local.json
+appsettings.Development.local.json
+appsettings.Production.local.json
+appsettings.Staging.local.json
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+*.env
+
+# Secret files
+secrets.json
+usersecrets.json
+.secrets
+secrets/
+
+# Key files
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+
+# Database files (if using local databases)
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuration backups
+appsettings.*.json.bak
+*.config.bak
