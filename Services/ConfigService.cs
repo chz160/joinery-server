@@ -29,6 +29,16 @@ public class ConfigService : IConfigService
         return int.Parse(_configuration.GetSection("JWT")["ExpirationHours"] ?? "24");
     }
 
+    public int GetJwtAccessTokenExpirationMinutes()
+    {
+        return int.Parse(_configuration.GetSection("JWT")["AccessTokenExpirationMinutes"] ?? "15");
+    }
+
+    public int GetJwtRefreshTokenExpirationDays()
+    {
+        return int.Parse(_configuration.GetSection("JWT")["RefreshTokenExpirationDays"] ?? "30");
+    }
+
     public string GetGitHubClientId()
     {
         return _configuration.GetSection("Authentication:GitHub")["ClientId"] ?? "";

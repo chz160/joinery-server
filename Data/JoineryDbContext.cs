@@ -19,6 +19,8 @@ public class JoineryDbContext : DbContext
     public DbSet<OrganizationEntraIdConfig> OrganizationEntraIdConfigs { get; set; }
     public DbSet<GitRepository> GitRepositories { get; set; }
     public DbSet<GitQueryFile> GitQueryFiles { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
+    public DbSet<BlacklistedToken> BlacklistedTokens { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -237,6 +239,47 @@ public class JoineryDbContext : DbContext
 
             // Ensure unique configuration per organization
             entity.HasIndex(e => e.OrganizationId).IsUnique();
+        });
+
+        // Configure RefreshToken entity
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Token).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.RevokedByIp).HasMaxLength(100);
+            entity.Property(e => e.ReasonRevoked).HasMaxLength(500);
+            entity.Property(e => e.Version).IsRequired();
+
+            // Relationship: RefreshToken -> User
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // Index for faster token lookups
+            entity.HasIndex(e => e.Token).IsUnique();
+            entity.HasIndex(e => new { e.UserId, e.IsRevoked });
+        });
+
+        // Configure BlacklistedToken entity
+        modelBuilder.Entity<BlacklistedToken>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.TokenHash).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.BlacklistedByIp).HasMaxLength(100);
+            entity.Property(e => e.Reason).HasMaxLength(500);
+            entity.Property(e => e.TokenType).IsRequired().HasMaxLength(20);
+
+            // Relationship: BlacklistedToken -> User (optional)
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            // Index for faster token hash lookups
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+            entity.HasIndex(e => e.ExpiresAt);
         });
 
         // Seed data for development
