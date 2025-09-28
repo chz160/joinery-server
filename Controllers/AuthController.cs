@@ -25,8 +25,9 @@ public class AuthController : ControllerBase
     private readonly IUserService _userService;
     private readonly ITokenService _tokenService;
     private readonly IRateLimitingService _rateLimitingService;
+    private readonly ISessionService _sessionService;
 
-    public AuthController(IConfiguration configuration, JoineryDbContext context, ILogger<AuthController> logger, IAwsIamService awsIamService, IEntraIdService entraIdService, IGitHubAuthService gitHubAuthService, IUserService userService, ITokenService tokenService, IRateLimitingService rateLimitingService)
+    public AuthController(IConfiguration configuration, JoineryDbContext context, ILogger<AuthController> logger, IAwsIamService awsIamService, IEntraIdService entraIdService, IGitHubAuthService gitHubAuthService, IUserService userService, ITokenService tokenService, IRateLimitingService rateLimitingService, ISessionService sessionService)
     {
         _configuration = configuration;
         _context = context;
@@ -37,6 +38,7 @@ public class AuthController : ControllerBase
         _userService = userService;
         _tokenService = tokenService;
         _rateLimitingService = rateLimitingService;
+        _sessionService = sessionService;
     }
 
     /// <summary>
@@ -105,7 +107,13 @@ public class AuthController : ControllerBase
             }
 
             var user = await _userService.GetOrCreateUserAsync(githubId, username ?? "unknown", email ?? "unknown@github.com", "GitHub");
-            var token = _tokenService.GenerateAccessToken(user);
+
+            // Create session
+            var ipAddress = GetClientIpAddress();
+            var userAgent = Request.Headers["User-Agent"].ToString();
+            var session = await _sessionService.CreateSessionAsync(user.Id, ipAddress, userAgent, "GitHub");
+
+            var token = _tokenService.GenerateAccessToken(user, session.SessionId);
             var refreshToken = await _tokenService.GenerateRefreshTokenAsync(user.Id);
 
             return Ok(new
@@ -114,6 +122,7 @@ public class AuthController : ControllerBase
                 refresh_token = refreshToken.Token,
                 token_type = "Bearer",
                 expires_in = _configuration.GetSection("JWT")["AccessTokenExpirationMinutes"] != null ? int.Parse(_configuration.GetSection("JWT")["AccessTokenExpirationMinutes"]!) * 60 : 15 * 60,
+                session_id = session.SessionId,
                 user = new
                 {
                     user.Id,
@@ -268,11 +277,19 @@ public class AuthController : ControllerBase
             }
 
             var user = await _userService.GetOrCreateUserAsync(microsoftId, username ?? "unknown", email ?? "unknown@microsoft.com", "Microsoft", fullName?.Trim());
-            var token = _tokenService.GenerateAccessToken(user);
+
+            // Create session
+            var ipAddress = GetClientIpAddress();
+            var userAgent = Request.Headers["User-Agent"].ToString();
+            var session = await _sessionService.CreateSessionAsync(user.Id, ipAddress, userAgent, "Microsoft");
+
+            var token = _tokenService.GenerateAccessToken(user, session.SessionId);
 
             return Ok(new
             {
-                token,
+                access_token = token,
+                token_type = "Bearer",
+                session_id = session.SessionId,
                 user = new
                 {
                     user.Id,
@@ -438,6 +455,19 @@ public class AuthController : ControllerBase
             _logger.LogError(ex, "Error during Entra ID authentication");
             return StatusCode(500, new { message = "Internal server error during authentication" });
         }
+    }
+
+    private string GetClientIpAddress()
+    {
+        var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(forwardedFor))
+            return forwardedFor.Split(',')[0].Trim();
+
+        var realIp = Request.Headers["X-Real-IP"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(realIp))
+            return realIp;
+
+        return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
     }
 }
 
