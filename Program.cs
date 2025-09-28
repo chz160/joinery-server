@@ -136,12 +136,12 @@ builder.Services.AddSingleton<IRateLimitStore>(serviceProvider =>
     var config = serviceProvider.GetRequiredService<IOptions<RateLimitConfig>>().Value;
     var logger = serviceProvider.GetRequiredService<ILogger<RedisRateLimitStore>>();
     var memoryStore = serviceProvider.GetRequiredService<MemoryRateLimitStore>();
-    
+
     if (config.EnableDistributedCache)
     {
         return new RedisRateLimitStore(logger, memoryStore);
     }
-    
+
     return memoryStore;
 });
 builder.Services.AddSingleton<IRateLimitingService, RateLimitingService>();

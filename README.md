@@ -32,6 +32,7 @@ The server-side portion of Joinery - a platform for sharing and managing databas
 ## Features
 
 - **Authentication**: GitHub OAuth, Microsoft Entra ID, and AWS IAM integration with JWT token-based security
+- **Rate Limiting**: Comprehensive rate limiting with configurable limits per authentication level and endpoint category
 - **Multi-source Query Access**: Support for both database queries and Git repository-based SQL files
 - **Organization Management**: Create and manage organizations with role-based access control, AWS IAM, and Microsoft Entra ID integration
 - **Team Management**: Complete team lifecycle with administrator permissions and member roles
@@ -303,6 +304,89 @@ The application will start at:
 
 - `GET /api/health` - Service health check with version and timestamp
 - `GET /api/health/ready` - Service readiness check for deployment orchestration
+
+## Rate Limiting
+
+The API implements comprehensive rate limiting to protect against abuse and ensure fair usage.
+
+### Rate Limit Headers
+
+All API responses include standard rate limiting headers:
+
+- `X-RateLimit-Limit`: Maximum requests allowed in the current window
+- `X-RateLimit-Remaining`: Number of requests remaining in the current window  
+- `X-RateLimit-Reset`: Unix timestamp when the rate limit resets
+- `X-RateLimit-Policy`: Applied policy level (Anonymous, Authenticated, Admin)
+- `Retry-After`: Seconds to wait before retrying (included on 429 responses)
+
+### Rate Limit Tiers
+
+**Anonymous Users (IP-based)**:
+- Development: 10 requests/minute, 500 requests/hour
+- Production: 60 requests/minute, 1000 requests/hour
+
+**Authenticated Users (User ID-based)**:
+- Development: 30 requests/minute, 2000 requests/hour
+- Production: 120 requests/minute, 5000 requests/hour
+
+**Admin Users**:
+- Unlimited (rate limits bypassed)
+
+### Endpoint-Specific Limits
+
+**Authentication Endpoints** (`/api/auth/*`):
+- Anonymous: 5 requests/minute (dev), 10 requests/minute (prod)
+- Authenticated: 10 requests/minute (dev), 20 requests/minute (prod)
+
+**Health Endpoints** (`/api/health/*`):
+- No rate limiting (always accessible for monitoring)
+
+### Rate Limit Exceeded Response
+
+When rate limits are exceeded, the API returns HTTP 429 with details:
+
+```json
+{
+  "error": "rate_limit_exceeded",
+  "message": "Rate limit exceeded. Too many requests.",
+  "details": {
+    "limit": 10,
+    "remaining": 0,
+    "reset_time": "2025-01-15T10:30:00Z",
+    "retry_after_seconds": 45,
+    "client_id": "ip:192.168.1.100",
+    "endpoint": "/api/organizations",
+    "auth_level": "Anonymous"
+  }
+}
+```
+
+### Configuration
+
+Rate limiting is configured in `appsettings.json`:
+
+```json
+{
+  "RateLimit": {
+    "EnableDistributedCache": false,
+    "Redis": {
+      "ConnectionString": "localhost:6379"
+    },
+    "Global": {
+      "Anonymous": {
+        "RequestsPerMinute": 60,
+        "RequestsPerHour": 1000,
+        "RequestsPerDay": 10000
+      },
+      "Authenticated": {
+        "RequestsPerMinute": 120,
+        "RequestsPerHour": 5000,
+        "RequestsPerDay": 50000
+      }
+    }
+  }
+}
+```
 
 ## Usage
 

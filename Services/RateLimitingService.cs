@@ -42,7 +42,7 @@ public class RateLimitingService : IRateLimitingService
     {
         var endpointCategory = DetermineEndpointCategory(endpoint);
         var settings = GetRateLimitSettings(endpointCategory, authLevel);
-        
+
         return await _store.CheckRateLimitAsync(clientId, endpoint, authLevel, settings);
     }
 
@@ -51,14 +51,14 @@ public class RateLimitingService : IRateLimitingService
         var clientId = GetClientId(context);
         var endpoint = context.Request.Path.Value ?? "";
         var authLevel = GetUserAuthLevel(context);
-        
+
         if (string.IsNullOrEmpty(endpointCategory))
         {
             endpointCategory = DetermineEndpointCategory(endpoint);
         }
-        
+
         var settings = GetRateLimitSettings(endpointCategory, authLevel);
-        
+
         return await _store.CheckRateLimitAsync(clientId, endpoint, authLevel, settings);
     }
 
@@ -69,7 +69,7 @@ public class RateLimitingService : IRateLimitingService
         {
             return GetSettingsForAuthLevel(endpointTiers, authLevel);
         }
-        
+
         // Fall back to global settings
         return GetSettingsForAuthLevel(_config.Global, authLevel);
     }
@@ -86,7 +86,7 @@ public class RateLimitingService : IRateLimitingService
             .Where(c => c.Type == ClaimTypes.Role)
             .Select(c => c.Value)
             .ToList();
-            
+
         if (userRoles.Contains("Admin") || userRoles.Contains("admin"))
         {
             return UserAuthLevel.Admin;
@@ -113,20 +113,20 @@ public class RateLimitingService : IRateLimitingService
         {
             var userId = context.User.Claims
                 .FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
-            
+
             if (!string.IsNullOrEmpty(userId))
             {
                 return $"user:{userId}";
             }
         }
-        
+
         // For anonymous users, use IP address
         var ipAddress = context.Connection.RemoteIpAddress?.ToString();
         if (!string.IsNullOrEmpty(ipAddress))
         {
             return $"ip:{ipAddress}";
         }
-        
+
         return "unknown";
     }
 
@@ -136,12 +136,12 @@ public class RateLimitingService : IRateLimitingService
         {
             return "Auth";
         }
-        
+
         if (endpoint.StartsWith("/api/health", StringComparison.OrdinalIgnoreCase))
         {
             return "Health";
         }
-        
+
         // Add more endpoint categories as needed
         return "Default";
     }

@@ -29,7 +29,7 @@ public class RateLimitMiddleware
         try
         {
             var rateLimitResult = await rateLimitingService.CheckRateLimitAsync(context);
-            
+
             // Add rate limit headers to response
             AddRateLimitHeaders(context.Response, rateLimitResult);
 
@@ -51,15 +51,15 @@ public class RateLimitMiddleware
     private bool ShouldSkipRateLimit(PathString path)
     {
         var pathValue = path.Value?.ToLowerInvariant() ?? "";
-        
+
         // Skip health endpoints
         if (pathValue.StartsWith("/api/health"))
         {
             return true;
         }
-        
+
         // Skip static files and swagger
-        if (pathValue.StartsWith("/swagger") || 
+        if (pathValue.StartsWith("/swagger") ||
             pathValue.StartsWith("/_framework") ||
             pathValue.StartsWith("/css") ||
             pathValue.StartsWith("/js") ||
@@ -67,7 +67,7 @@ public class RateLimitMiddleware
         {
             return true;
         }
-        
+
         return false;
     }
 
@@ -77,10 +77,10 @@ public class RateLimitMiddleware
         response.Headers["X-RateLimit-Limit"] = result.Limit.ToString();
         response.Headers["X-RateLimit-Remaining"] = result.Remaining.ToString();
         response.Headers["X-RateLimit-Reset"] = ((DateTimeOffset)result.ResetTime).ToUnixTimeSeconds().ToString();
-        
+
         // Additional informational headers
         response.Headers["X-RateLimit-Policy"] = $"{result.AuthLevel}";
-        
+
         if (!result.IsAllowed && result.RetryAfter > TimeSpan.Zero)
         {
             response.Headers["Retry-After"] = ((int)result.RetryAfter.TotalSeconds).ToString();

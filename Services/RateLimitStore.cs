@@ -28,17 +28,17 @@ public class MemoryRateLimitStore : IRateLimitStore
     {
         var key = $"{clientId}:{endpoint}:{authLevel}";
         var now = DateTime.UtcNow;
-        
+
         var clientLimit = _clientLimits.GetOrAdd(key, _ => new ClientRateLimit());
-        
+
         lock (clientLimit)
         {
             // Clean old requests
             CleanupOldRequests(clientLimit, now);
-            
+
             // Get effective limit (0 means unlimited)
             var limit = GetEffectiveLimit(settings, now);
-            
+
             if (limit == 0)
             {
                 return Task.FromResult(new RateLimitResult
@@ -53,15 +53,15 @@ public class MemoryRateLimitStore : IRateLimitStore
                     RetryAfter = TimeSpan.Zero
                 });
             }
-            
+
             var requestCount = GetRequestCount(clientLimit, now, out DateTime resetTime);
             var remaining = Math.Max(0, limit - requestCount);
-            
+
             if (requestCount >= limit)
             {
-                _logger.LogWarning("Rate limit exceeded for client {ClientId}, endpoint {Endpoint}, auth level {AuthLevel}. Count: {Count}, Limit: {Limit}", 
+                _logger.LogWarning("Rate limit exceeded for client {ClientId}, endpoint {Endpoint}, auth level {AuthLevel}. Count: {Count}, Limit: {Limit}",
                     clientId, endpoint, authLevel, requestCount, limit);
-                
+
                 return Task.FromResult(new RateLimitResult
                 {
                     IsAllowed = false,
@@ -74,10 +74,10 @@ public class MemoryRateLimitStore : IRateLimitStore
                     RetryAfter = resetTime - now
                 });
             }
-            
+
             // Record this request
             clientLimit.Requests.Add(now);
-            
+
             return Task.FromResult(new RateLimitResult
             {
                 IsAllowed = true,
@@ -100,15 +100,9 @@ public class MemoryRateLimitStore : IRateLimitStore
 
     private int GetEffectiveLimit(RateLimitSettings settings, DateTime now)
     {
-        // Use the most restrictive non-zero limit
-        var limits = new[]
-        {
-            settings.RequestsPerMinute,
-            (int)(settings.RequestsPerHour / 60.0),
-            (int)(settings.RequestsPerDay / (24.0 * 60.0))
-        }.Where(l => l > 0);
-        
-        return limits.Any() ? limits.Min() : 0;
+        // For sliding window, we primarily use per-minute limits
+        // The other limits are for compliance but shouldn't be more restrictive than per-minute
+        return settings.RequestsPerMinute;
     }
 
     private int GetRequestCount(ClientRateLimit clientLimit, DateTime now, out DateTime resetTime)
@@ -116,11 +110,11 @@ public class MemoryRateLimitStore : IRateLimitStore
         // Count requests in the last minute for minute-based limiting
         var oneMinuteAgo = now.AddMinutes(-1);
         var recentRequests = clientLimit.Requests.Where(r => r > oneMinuteAgo).ToList();
-        
-        resetTime = recentRequests.Any() 
-            ? recentRequests.Min().AddMinutes(1) 
+
+        resetTime = recentRequests.Any()
+            ? recentRequests.Min().AddMinutes(1)
             : now.AddMinutes(1);
-        
+
         return recentRequests.Count;
     }
 
