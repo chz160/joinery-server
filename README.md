@@ -1073,6 +1073,44 @@ Logging__LogLevel__Default=Information
 Logging__LogLevel__Microsoft__AspNetCore=Warning
 ```
 
+### Docker Configuration
+
+The application is optimized for containerized deployments with the following features:
+
+#### Docker Image Configuration
+- **Base Image**: `mcr.microsoft.com/dotnet/aspnet:8.0-jammy`
+- **Non-root User**: Runs as `joinery` user for enhanced security
+- **Ports**: HTTP on 8080, HTTPS on 8081
+- **Health Check**: Built-in monitoring of `/api/health` endpoint
+- **Multi-platform**: Supports both amd64 and arm64 architectures
+
+#### Docker Environment Variables
+```bash
+# Required environment variables for Docker deployment
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_URLS=http://+:8080;https://+:8081
+
+# Authentication secrets (from secure store)
+Authentication__GitHub__ClientId=your-github-client-id
+Authentication__GitHub__ClientSecret=your-github-client-secret
+Authentication__Microsoft__TenantId=your-tenant-id
+Authentication__Microsoft__ClientId=your-microsoft-client-id
+Authentication__Microsoft__ClientSecret=your-microsoft-client-secret
+
+# JWT Configuration
+JWT__SecretKey=your-production-jwt-secret-256-bits-minimum
+JWT__Issuer=JoineryServer
+JWT__Audience=JoineryClients
+JWT__ExpirationHours=24
+```
+
+#### Docker Security Best Practices
+- Container runs as non-root user (`joinery:joinery`)
+- Minimal base image with only required dependencies
+- Health checks for container orchestration
+- Multi-stage build for optimized image size
+- Automated security scanning in CI/CD pipeline
+
 ### Security Warnings
 
 > ⚠️ **CRITICAL SECURITY WARNINGS:**

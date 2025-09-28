@@ -1,0 +1,51 @@
+# .dockerignore - files and directories to exclude from Docker build context
+
+# Build output
+bin/
+obj/
+out/
+publish/
+
+# IDE files
+.vs/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+LICENSE
+
+# CI/CD
+.github/
+
+# Environment files
+.env*
+appsettings.Local.json
+appsettings.Development.local.json
+
+# Security files
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
