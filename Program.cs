@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.Identity.Web;
@@ -78,6 +79,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // Configure authorization
 builder.Services.AddAuthorization();
+builder.Services.AddSingleton<IAuthorizationHandler, JoineryServer.Authorization.ScopeAuthorizationHandler>();
 
 // Configure Swagger/OpenAPI with security definitions
 builder.Services.AddEndpointsApiExplorer();

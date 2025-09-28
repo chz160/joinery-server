@@ -137,9 +137,12 @@ public class ApiKeyService : IApiKeyService
         if (!apiKey.StartsWith(KEY_PREFIX))
             return false;
 
-        // Check if key has reasonable length (prefix + base64 encoded key)
-        var expectedMinLength = KEY_PREFIX.Length + ((KEY_LENGTH * 4 / 3) + 3) & ~3; // Base64 padding
-        if (apiKey.Length < expectedMinLength)
+        // Check if key has reasonable length
+        // We strip padding and special chars, so actual length will be shorter than full base64
+        var minLength = KEY_PREFIX.Length + 30; // Minimum reasonable length after stripping
+        var maxLength = KEY_PREFIX.Length + 50; // Maximum reasonable length
+
+        if (apiKey.Length < minLength || apiKey.Length > maxLength)
             return false;
 
         return true;
