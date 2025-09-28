@@ -631,12 +631,25 @@ docker build -t joinery-server .
 # Run locally with development settings
 docker run -d \
   --name joinery-server \
-  -p 5000:80 -p 5001:443 \
+  -p 8080:8080 -p 8081:8081 \
   -e ASPNETCORE_ENVIRONMENT=Development \
   -e Authentication__GitHub__ClientId="your-dev-client-id" \
   --env-file .env.development \
   joinery-server
+
+# Access the application
+# HTTP: http://localhost:8080
+# HTTPS: https://localhost:8081
+# Health check: http://localhost:8080/api/health
+# Swagger UI: http://localhost:8080/swagger
 ```
+
+**Docker Image Features**:
+- Multi-stage build for optimized production image
+- Non-root user for enhanced security
+- Built-in health checks
+- Multi-platform support (amd64, arm64)
+- Automatic publishing to Docker Hub on main branch commits
 
 ### Integration with Infrastructure Repository
 
@@ -648,8 +661,8 @@ services:
   api:
     image: chz160/joinery-server:latest    # Built from THIS repo's Dockerfile
     ports:
-      - "5256:80"
-      - "7035:443"
+      - "8080:8080"
+      - "8081:8081"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - Authentication__GitHub__ClientId=${GITHUB_CLIENT_ID}
@@ -704,31 +717,29 @@ The relationship between this repository and the infrastructure repository follo
    - Manages environment-specific configuration
    - Handles production deployment pipelines
 
-#### Example CI Pipeline Integration
-```yaml
-# In joinery-server/.github/workflows/build.yml
-name: Build and Push Container
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+#### CI Pipeline Implementation
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Build Docker image
-        run: docker build -t chz160/joinery-server:${{ github.sha }} .
-        
-      - name: Push to registry
-        run: |
-          docker tag chz160/joinery-server:${{ github.sha }} chz160/joinery-server:latest
-          docker push chz160/joinery-server:${{ github.sha }}
-          docker push chz160/joinery-server:latest
-```
+This repository includes automated Docker image building and publishing via GitHub Actions.
+
+**Workflow**: `.github/workflows/docker-publish.yml`
+- **Triggers**: Push to `main` branch, pull requests
+- **Images**: Multi-platform builds (linux/amd64, linux/arm64)
+- **Registry**: Docker Hub (`chz160/joinery-server`)
+- **Tags**: `latest` for main branch, commit SHA, branch names
+
+**Required GitHub Secrets**:
+Set these in repository Settings > Secrets and variables > Actions:
+
+| Secret Name | Description | Example |
+|-------------|-------------|---------|
+| `DOCKER_HUB_USERNAME` | Docker Hub username | `chz160` |
+| `DOCKER_HUB_ACCESS_TOKEN` | Docker Hub access token | `dckr_pat_...` |
+
+**Setup Instructions**:
+1. Go to [Docker Hub](https://hub.docker.com/) > Account Settings > Security
+2. Create new access token with "Read, Write, Delete" permissions
+3. Add secrets to GitHub repository settings
+4. Push to main branch triggers automatic image build and publish
 
 ```yaml
 # In joinery-infra/.github/workflows/deploy.yml  
@@ -1061,6 +1072,44 @@ ConnectionStrings__DefaultConnection=production-database-connection-string
 Logging__LogLevel__Default=Information
 Logging__LogLevel__Microsoft__AspNetCore=Warning
 ```
+
+### Docker Configuration
+
+The application is optimized for containerized deployments with the following features:
+
+#### Docker Image Configuration
+- **Base Image**: `mcr.microsoft.com/dotnet/aspnet:8.0-jammy`
+- **Non-root User**: Runs as `joinery` user for enhanced security
+- **Ports**: HTTP on 8080, HTTPS on 8081
+- **Health Check**: Built-in monitoring of `/api/health` endpoint
+- **Multi-platform**: Supports both amd64 and arm64 architectures
+
+#### Docker Environment Variables
+```bash
+# Required environment variables for Docker deployment
+ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_URLS=http://+:8080;https://+:8081
+
+# Authentication secrets (from secure store)
+Authentication__GitHub__ClientId=your-github-client-id
+Authentication__GitHub__ClientSecret=your-github-client-secret
+Authentication__Microsoft__TenantId=your-tenant-id
+Authentication__Microsoft__ClientId=your-microsoft-client-id
+Authentication__Microsoft__ClientSecret=your-microsoft-client-secret
+
+# JWT Configuration
+JWT__SecretKey=your-production-jwt-secret-256-bits-minimum
+JWT__Issuer=JoineryServer
+JWT__Audience=JoineryClients
+JWT__ExpirationHours=24
+```
+
+#### Docker Security Best Practices
+- Container runs as non-root user (`joinery:joinery`)
+- Minimal base image with only required dependencies
+- Health checks for container orchestration
+- Multi-stage build for optimized image size
+- Automated security scanning in CI/CD pipeline
 
 ### Security Warnings
 
