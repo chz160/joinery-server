@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.Identity.Web;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using JoineryServer.Data;
+using JoineryServer.Models;
 using JoineryServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -126,7 +128,22 @@ builder.Services.AddCors(options =>
         });
 });
 
-// Add rate limiting service (simple in-memory implementation)
+// Add rate limiting services
+builder.Services.Configure<RateLimitConfig>(builder.Configuration.GetSection("RateLimit"));
+builder.Services.AddSingleton<MemoryRateLimitStore>();
+builder.Services.AddSingleton<IRateLimitStore>(serviceProvider =>
+{
+    var config = serviceProvider.GetRequiredService<IOptions<RateLimitConfig>>().Value;
+    var logger = serviceProvider.GetRequiredService<ILogger<RedisRateLimitStore>>();
+    var memoryStore = serviceProvider.GetRequiredService<MemoryRateLimitStore>();
+    
+    if (config.EnableDistributedCache)
+    {
+        return new RedisRateLimitStore(logger, memoryStore);
+    }
+    
+    return memoryStore;
+});
 builder.Services.AddSingleton<IRateLimitingService, RateLimitingService>();
 
 var app = builder.Build();
@@ -152,6 +169,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Add rate limiting middleware before authentication
+app.UseMiddleware<JoineryServer.Middleware.RateLimitMiddleware>();
 
 app.UseAuthentication();
 app.UseMiddleware<JoineryServer.Middleware.JwtValidationMiddleware>();
