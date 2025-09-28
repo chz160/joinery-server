@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.Identity.Web;
@@ -40,6 +41,7 @@ builder.Services.AddScoped<IGitHubAuthService, GitHubAuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IConfigService, ConfigService>();
+builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
 
 // Add session management services
 builder.Services.AddScoped<ISessionRepository, SessionRepository>();
@@ -77,6 +79,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // Configure authorization
 builder.Services.AddAuthorization();
+builder.Services.AddSingleton<IAuthorizationHandler, JoineryServer.Authorization.ScopeAuthorizationHandler>();
 
 // Configure Swagger/OpenAPI with security definitions
 builder.Services.AddEndpointsApiExplorer();
@@ -100,6 +103,24 @@ builder.Services.AddSwaggerGen(c =>
         BearerFormat = "JWT"
     });
 
+    // Add API Key authentication to Swagger
+    c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+    {
+        Description = "API Key Authorization header using the ApiKey scheme",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "ApiKey"
+    });
+
+    c.AddSecurityDefinition("X-API-Key", new OpenApiSecurityScheme
+    {
+        Description = "API Key in X-API-Key header",
+        Name = "X-API-Key",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey
+    });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -109,6 +130,28 @@ builder.Services.AddSwaggerGen(c =>
                 {
                     Type = ReferenceType.SecurityScheme,
                     Id = "Bearer"
+                }
+            },
+            new string[] {}
+        },
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "ApiKey"
+                }
+            },
+            new string[] {}
+        },
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "X-API-Key"
                 }
             },
             new string[] {}
@@ -174,6 +217,7 @@ app.UseHttpsRedirection();
 app.UseMiddleware<JoineryServer.Middleware.RateLimitMiddleware>();
 
 app.UseAuthentication();
+app.UseMiddleware<JoineryServer.Middleware.ApiKeyAuthenticationMiddleware>();
 app.UseMiddleware<JoineryServer.Middleware.JwtValidationMiddleware>();
 app.UseMiddleware<JoineryServer.Middleware.SessionValidationMiddleware>();
 app.UseAuthorization();
