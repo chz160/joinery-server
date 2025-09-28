@@ -1,18 +1,13 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace JoineryServer.Models;
 
 public class TeamMember
 {
     public int Id { get; set; }
 
-    [Required]
     public int TeamId { get; set; }
 
-    [Required]
     public int UserId { get; set; }
 
-    [Required]
     public TeamRole Role { get; set; } = TeamRole.Member;
 
     /// <summary>
