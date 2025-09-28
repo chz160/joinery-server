@@ -81,6 +81,17 @@ public class RateLimitingService : IRateLimitingService
             return UserAuthLevel.Anonymous;
         }
 
+        // Check authentication type - API keys get special treatment
+        var authType = context.User.Claims
+            .FirstOrDefault(c => c.Type == "auth_type")?.Value;
+
+        if (authType == "api_key")
+        {
+            // API keys are treated as authenticated users
+            // You could implement API key-specific rate limiting tiers here
+            return UserAuthLevel.Authenticated;
+        }
+
         // Check if user is admin (you can customize this logic based on your admin identification)
         var userRoles = context.User.Claims
             .Where(c => c.Type == ClaimTypes.Role)
@@ -116,6 +127,18 @@ public class RateLimitingService : IRateLimitingService
 
             if (!string.IsNullOrEmpty(userId))
             {
+                // Distinguish between API key and regular JWT authentication
+                var authType = context.User.Claims
+                    .FirstOrDefault(c => c.Type == "auth_type")?.Value;
+
+                var apiKeyId = context.User.Claims
+                    .FirstOrDefault(c => c.Type == "api_key_id")?.Value;
+
+                if (authType == "api_key" && !string.IsNullOrEmpty(apiKeyId))
+                {
+                    return $"apikey:{apiKeyId}";
+                }
+
                 return $"user:{userId}";
             }
         }
