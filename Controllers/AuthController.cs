@@ -24,10 +24,9 @@ public class AuthController : ControllerBase
     private readonly IGitHubAuthService _gitHubAuthService;
     private readonly IUserService _userService;
     private readonly ITokenService _tokenService;
-    private readonly IRateLimitingService _rateLimitingService;
     private readonly ISessionService _sessionService;
 
-    public AuthController(IConfiguration configuration, JoineryDbContext context, ILogger<AuthController> logger, IAwsIamService awsIamService, IEntraIdService entraIdService, IGitHubAuthService gitHubAuthService, IUserService userService, ITokenService tokenService, IRateLimitingService rateLimitingService, ISessionService sessionService)
+    public AuthController(IConfiguration configuration, JoineryDbContext context, ILogger<AuthController> logger, IAwsIamService awsIamService, IEntraIdService entraIdService, IGitHubAuthService gitHubAuthService, IUserService userService, ITokenService tokenService, ISessionService sessionService)
     {
         _configuration = configuration;
         _context = context;
@@ -37,7 +36,6 @@ public class AuthController : ControllerBase
         _gitHubAuthService = gitHubAuthService;
         _userService = userService;
         _tokenService = tokenService;
-        _rateLimitingService = rateLimitingService;
         _sessionService = sessionService;
     }
 
@@ -47,13 +45,6 @@ public class AuthController : ControllerBase
     [HttpGet("login/github")]
     public IActionResult LoginGitHub()
     {
-        // Rate limiting check
-        var clientId = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        if (!_rateLimitingService.IsAllowed(clientId, "auth/login/github"))
-        {
-            return StatusCode(429, new { message = "Rate limit exceeded" });
-        }
-
         // Generate state parameter for CSRF protection
         var state = _gitHubAuthService.GenerateState();
 
