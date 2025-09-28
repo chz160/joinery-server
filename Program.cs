@@ -159,20 +159,58 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Add CORS for development
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll",
-        builder =>
-        {
-            builder.AllowAnyOrigin()
-                   .AllowAnyMethod()
-                   .AllowAnyHeader();
-        });
-});
-
 // Add rate limiting services
 builder.Services.Configure<RateLimitConfig>(builder.Configuration.GetSection("RateLimit"));
+
+// Add CORS configuration
+builder.Services.Configure<CorsConfig>(builder.Configuration.GetSection("Cors"));
+
+// Configure CORS
+var corsConfig = builder.Configuration.GetSection("Cors").Get<CorsConfig>() ?? new CorsConfig();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("JoineryCorsPolicy", policy =>
+    {
+        if (builder.Environment.IsDevelopment() && corsConfig.AllowAnyOriginInDevelopment)
+        {
+            // Development: Allow any origin for convenience
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader()
+                  .WithExposedHeaders(corsConfig.ExposedHeaders.ToArray());
+        }
+        else
+        {
+            // Production: Strict origin validation
+            if (corsConfig.AllowedOrigins.Any())
+            {
+                policy.WithOrigins(corsConfig.AllowedOrigins.ToArray());
+            }
+
+            if (corsConfig.AllowedMethods.Any())
+            {
+                policy.WithMethods(corsConfig.AllowedMethods.ToArray());
+            }
+
+            if (corsConfig.AllowedHeaders.Any())
+            {
+                policy.WithHeaders(corsConfig.AllowedHeaders.ToArray());
+            }
+
+            if (corsConfig.ExposedHeaders.Any())
+            {
+                policy.WithExposedHeaders(corsConfig.ExposedHeaders.ToArray());
+            }
+
+            if (corsConfig.AllowCredentials)
+            {
+                policy.AllowCredentials();
+            }
+
+            policy.SetPreflightMaxAge(TimeSpan.FromSeconds(corsConfig.PreflightMaxAge));
+        }
+    });
+});
 builder.Services.AddSingleton<MemoryRateLimitStore>();
 builder.Services.AddSingleton<IRateLimitStore>(serviceProvider =>
 {
@@ -208,8 +246,10 @@ if (app.Environment.IsDevelopment())
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Joinery Server API V1");
         c.RoutePrefix = "swagger"; // Set Swagger UI at /swagger endpoint
     });
-    app.UseCors("AllowAll");
 }
+
+// Add CORS middleware - must be before routing and after authentication
+app.UseCors("JoineryCorsPolicy");
 
 app.UseHttpsRedirection();
 
