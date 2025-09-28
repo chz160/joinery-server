@@ -577,6 +577,208 @@ Key configuration sections in `appsettings.json`:
 }
 ```
 
+## Container Development & Deployment
+
+This section explains the containerization approach for Joinery Server, including why the Dockerfile lives in this repository and how it relates to infrastructure orchestration.
+
+### Dockerfile Ownership & Rationale
+
+The `Dockerfile` for Joinery Server lives in this application repository, **not in the infrastructure repository**. This approach follows industry best practices for several key reasons:
+
+#### Why Application Repository Owns the Dockerfile
+- **Tight Coupling**: Build instructions are tightly coupled to the application code and should be versioned together
+- **Code + Build Consistency**: Changes to application dependencies, runtime requirements, or build steps are automatically versioned with the code changes
+- **Developer Experience**: Developers can build, test, and run containers locally using the same build process as production
+- **Atomic Updates**: Application updates and build configuration changes happen atomically in a single commit/PR
+
+#### Infrastructure Repository Responsibilities
+The [joinery-infra](https://github.com/chz160/joinery-infra) repository handles:
+- **Orchestration**: Docker Compose files for full stack deployment
+- **CI/CD Pipelines**: Build automation, testing, and deployment workflows  
+- **Environment Configuration**: Production, staging, and development environment setups
+- **Deployment Scripts**: Infrastructure provisioning and deployment automation
+
+### Recommended Repository Structure
+
+```
+joinery-server/                     # Application Repository (THIS REPO)
+├── Dockerfile                      # Container build instructions (LIVES HERE)
+├── Controllers/                    # API controllers
+├── Services/                       # Business logic services
+├── Models/                         # Data models
+├── Data/                          # Entity Framework context
+├── Program.cs                     # Application startup
+├── JoineryServer.csproj           # Project file
+└── README.md                      # This documentation
+
+joinery-infra/                      # Infrastructure Repository (SEPARATE REPO)
+├── docker-compose.yml             # Full stack orchestration
+├── docker-compose.prod.yml        # Production overrides
+├── .github/workflows/             # CI/CD pipelines
+├── terraform/                     # Infrastructure as code
+├── helm/                          # Kubernetes deployment
+└── scripts/                       # Deployment automation
+```
+
+### Local Development with Docker
+
+Build and run locally using the Dockerfile in this repository:
+
+```bash
+# Build the container image
+docker build -t joinery-server .
+
+# Run locally with development settings
+docker run -d \
+  --name joinery-server \
+  -p 5000:80 -p 5001:443 \
+  -e ASPNETCORE_ENVIRONMENT=Development \
+  -e Authentication__GitHub__ClientId="your-dev-client-id" \
+  --env-file .env.development \
+  joinery-server
+```
+
+### Integration with Infrastructure Repository
+
+The infrastructure repository references this image for orchestration:
+
+#### Example Docker Compose (from joinery-infra repository)
+```yaml
+services:
+  api:
+    image: chz160/joinery-server:latest    # Built from THIS repo's Dockerfile
+    ports:
+      - "5256:80"
+      - "7035:443"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - Authentication__GitHub__ClientId=${GITHUB_CLIENT_ID}
+    depends_on:
+      - db
+    networks:
+      - joinery-network
+
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=joinerydb
+      - POSTGRES_USER=joineryuser
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - joinery-network
+
+  frontend:
+    image: chz160/joinery-frontend:latest
+    ports:
+      - "3000:80"
+    environment:
+      - REACT_APP_API_URL=http://api:5256
+    depends_on:
+      - api
+    networks:
+      - joinery-network
+
+volumes:
+  postgres_data:
+
+networks:
+  joinery-network:
+    driver: bridge
+```
+
+### CI/CD Workflow Integration
+
+The relationship between this repository and the infrastructure repository follows this pattern:
+
+1. **Application Repository (joinery-server)**: 
+   - Developers make code changes
+   - CI pipeline builds Docker image using local Dockerfile
+   - Image is pushed to container registry (GitHub Container Registry or Docker Hub)
+   - Tagged with commit SHA and version tags
+
+2. **Infrastructure Repository (joinery-infra)**:
+   - References the latest stable image tags from joinery-server
+   - Orchestrates deployment using Docker Compose or Kubernetes
+   - Manages environment-specific configuration
+   - Handles production deployment pipelines
+
+#### Example CI Pipeline Integration
+```yaml
+# In joinery-server/.github/workflows/build.yml
+name: Build and Push Container
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Build Docker image
+        run: docker build -t chz160/joinery-server:${{ github.sha }} .
+        
+      - name: Push to registry
+        run: |
+          docker tag chz160/joinery-server:${{ github.sha }} chz160/joinery-server:latest
+          docker push chz160/joinery-server:${{ github.sha }}
+          docker push chz160/joinery-server:latest
+```
+
+```yaml
+# In joinery-infra/.github/workflows/deploy.yml  
+name: Deploy Stack
+on:
+  workflow_dispatch:
+    inputs:
+      api_version:
+        description: 'API version to deploy'
+        required: true
+        default: 'latest'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Deploy with specific API version
+        run: |
+          export API_IMAGE=chz160/joinery-server:${{ github.event.inputs.api_version }}
+          docker-compose -f docker-compose.prod.yml up -d
+```
+
+### Benefits of This Approach
+
+- **Version Synchronization**: Application code and build instructions stay in sync
+- **Developer Productivity**: Local development matches production build exactly  
+- **Clear Separation**: Infrastructure concerns separated from application concerns
+- **Scalable Architecture**: Multiple applications can follow the same pattern
+- **Better Testing**: Application containers can be tested independently of infrastructure
+
+### Getting Started
+
+1. **Clone this repository** and build locally:
+   ```bash
+   git clone https://github.com/chz160/joinery-server.git
+   cd joinery-server
+   docker build -t joinery-server .
+   ```
+
+2. **For full stack development**, clone the infrastructure repository:
+   ```bash
+   git clone https://github.com/chz160/joinery-infra.git
+   cd joinery-infra
+   docker-compose up -d
+   ```
+
+3. **For production deployment**, see the [joinery-infra repository](https://github.com/chz160/joinery-infra) for detailed orchestration and deployment instructions.
+
 ## Production Deployment
 
 > 🚀 **Important:** This section provides comprehensive guidance for deploying Joinery Server to production environments with security best practices.
@@ -893,28 +1095,8 @@ Logging__LogLevel__Microsoft__AspNetCore=Warning
 ### Deployment Examples
 
 #### Docker Deployment
-```dockerfile
-# Dockerfile for production
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-WORKDIR /app
-EXPOSE 80
-EXPOSE 443
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
-COPY ["JoineryServer.csproj", "./"]
-RUN dotnet restore
-COPY . .
-RUN dotnet build "JoineryServer.csproj" -c Release -o /app/build
-
-FROM build AS publish
-RUN dotnet publish "JoineryServer.csproj" -c Release -o /app/publish
-
-FROM base AS final
-WORKDIR /app
-COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "JoineryServer.dll"]
-```
+The repository includes a production-ready `Dockerfile` for containerized deployment. This Dockerfile uses multi-stage builds for optimal image size and security.
 
 ```bash
 # Build and run with Docker
