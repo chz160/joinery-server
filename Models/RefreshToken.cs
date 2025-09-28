@@ -1,13 +1,9 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace JoineryServer.Models;
 
 public class RefreshToken
 {
     public int Id { get; set; }
 
-    [Required]
-    [MaxLength(500)]
     public string Token { get; set; } = string.Empty;
 
     public int UserId { get; set; }
@@ -20,10 +16,8 @@ public class RefreshToken
 
     public DateTime? RevokedAt { get; set; }
 
-    [MaxLength(100)]
     public string? RevokedByIp { get; set; }
 
-    [MaxLength(500)]
     public string? ReasonRevoked { get; set; }
 
     // Token version for forced rotation
