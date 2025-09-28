@@ -43,7 +43,7 @@ The server-side portion of Joinery - a platform for sharing and managing databas
 - **RESTful API**: Clean, documented endpoints with comprehensive Swagger documentation
 - **Health Monitoring**: Built-in health check and readiness endpoints for deployment monitoring
 - **In-Memory Database**: Quick MVP setup with Entity Framework Core
-- **CORS Support**: Cross-origin resource sharing configured for development
+- **CORS Configuration**: Environment-aware Cross-Origin Resource Sharing with production security
 
 ## Prerequisites
 
@@ -568,6 +568,11 @@ Key configuration sections in `appsettings.json`:
     "Issuer": "JoineryServer",
     "Audience": "JoineryClients",
     "ExpirationHours": 24
+  },
+  "Cors": {
+    "AllowedOrigins": ["https://your-production-domain.com"],
+    "AllowCredentials": true,
+    "PreflightMaxAge": 86400
   }
 }
 ```
@@ -617,6 +622,11 @@ cp appsettings.Production.json.example appsettings.Production.json
     "Issuer": "JoineryServer",
     "Audience": "JoineryClients",
     "ExpirationHours": 24
+  },
+  "Cors": {
+    "AllowedOrigins": ["https://your-production-frontend.com", "https://your-app-domain.com"],
+    "AllowCredentials": true,
+    "PreflightMaxAge": 86400
   }
 }
 ```
@@ -663,6 +673,9 @@ export ASPNETCORE_URLS="http://+:5000;https://+:5001"
 - **`JWT__ExpirationHours`**: Token expiration time (default: 24 hours)
 - **`Logging__LogLevel__*`**: Application logging levels
 - **`ASPNETCORE_URLS`**: Server URLs and ports
+- **`Cors__AllowedOrigins`**: Array of allowed frontend origins (production security)
+- **`Cors__AllowCredentials`**: Enable credential support for CORS requests (default: true)
+- **`Cors__PreflightMaxAge`**: Cache duration for preflight requests in seconds (default: 86400)
 
 ### Managed Secrets Stores (Highly Recommended)
 
@@ -795,7 +808,9 @@ curl -I https://your-production-domain.com/api/auth/login/github
 - [ ] **API Security:**
   - [ ] Protected endpoints return 401 without authentication
   - [ ] JWT tokens properly validated
-  - [ ] CORS configured for production domains only
+  - [ ] CORS configured for production domains only (no wildcard origins in production)
+  - [ ] CORS preflight requests handled correctly
+  - [ ] CORS credentials properly restricted to trusted origins
 
 #### 7. Monitoring and Logging
 - [ ] **Application Logging:**
@@ -830,6 +845,12 @@ JWT__SecretKey=production-jwt-secret-key-minimum-256-bits
 JWT__Issuer=JoineryServer
 JWT__Audience=JoineryClients
 JWT__ExpirationHours=24
+
+# CORS Configuration for frontend origins
+Cors__AllowedOrigins__0=https://your-production-frontend.com
+Cors__AllowedOrigins__1=https://your-app-domain.com
+Cors__AllowCredentials=true
+Cors__PreflightMaxAge=86400
 
 # Database (if using external database)
 ConnectionStrings__DefaultConnection=production-database-connection-string
