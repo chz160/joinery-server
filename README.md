@@ -70,8 +70,8 @@ cd joinery-server
 1. Go to GitHub Settings > Developer settings > OAuth Apps
 2. Create a new OAuth App with:
    - Application name: `Joinery Server (Dev)`
-   - Homepage URL: `https://localhost:7050`
-   - Authorization callback URL: `https://localhost:7050/signin-github`
+   - Homepage URL: `https://localhost:7035`
+   - Authorization callback URL: `https://localhost:7035/signin-github`
 3. Copy the Client ID and Client Secret
 
 #### Microsoft Entra ID Setup
@@ -79,7 +79,7 @@ cd joinery-server
 1. Go to Azure Portal > Microsoft Entra ID > App registrations
 2. Create a new registration with:
    - Name: `Joinery Server`
-   - Redirect URI: `https://localhost:7050/signin-microsoft`
+   - Redirect URI: `https://localhost:7035/signin-microsoft`
 3. Copy the Application (client) ID, Directory (tenant) ID
 4. Create a client secret in "Certificates & secrets"
 
@@ -234,8 +234,8 @@ dotnet run
 ```
 
 The application will start at:
-- HTTPS: `https://localhost:7050`
-- HTTP: `http://localhost:5050`
+- HTTPS: `https://localhost:7035`
+- HTTP: `http://localhost:5256`
 
 ## API Endpoints
 
@@ -391,7 +391,7 @@ Rate limiting is configured in `appsettings.json`:
 ## Usage
 
 ### 1. Access Swagger UI
-Navigate to `/swagger` endpoint (e.g., `https://localhost:7050/swagger`) for interactive API documentation with JWT authentication support.
+Navigate to `/swagger` endpoint (e.g., `https://localhost:7035/swagger`) for interactive API documentation with JWT authentication support.
 
 ### 2. Authenticate  
 Use one of the login endpoints to authenticate via GitHub, Microsoft, AWS IAM, or Entra ID:
@@ -631,16 +631,16 @@ docker build -t joinery-server .
 # Run locally with development settings
 docker run -d \
   --name joinery-server \
-  -p 8080:8080 \
+  -p 5256:5256 \
   -e ASPNETCORE_ENVIRONMENT=Development \
   -e Authentication__GitHub__ClientId="your-dev-client-id" \
   --env-file .env.development \
   joinery-server
 
 # Access the application
-# HTTP: http://localhost:8080
-# Health check: http://localhost:8080/api/health
-# Swagger UI: http://localhost:8080/swagger
+# HTTP: http://localhost:5256
+# Health check: http://localhost:5256/api/health
+# Swagger UI: http://localhost:5256/swagger
 ```
 
 **Docker Image Features**:
@@ -660,7 +660,7 @@ services:
   api:
     image: chz160/joinery-server:latest    # Built from THIS repo's Dockerfile
     ports:
-      - "8080:8080"
+      - "5256:5256"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - Authentication__GitHub__ClientId=${GITHUB_CLIENT_ID}
@@ -1109,7 +1109,7 @@ The application is optimized for containerized deployments with the following fe
 #### Docker Image Configuration
 - **Base Image**: `mcr.microsoft.com/dotnet/aspnet:8.0-jammy`
 - **Non-root User**: Runs as `joinery` user for enhanced security
-- **Ports**: HTTP on 8080 (SSL termination handled by reverse proxy)
+- **Ports**: HTTP on 5256 (SSL termination handled by reverse proxy)
 - **Health Check**: Built-in monitoring of `/api/health` endpoint
 - **Multi-platform**: Supports both amd64 and arm64 architectures
 
@@ -1119,7 +1119,7 @@ The application is optimized for containerized deployments with the following fe
 ```bash
 # Required environment variables for Docker deployment
 ASPNETCORE_ENVIRONMENT=Production
-ASPNETCORE_URLS=http://+:8080
+ASPNETCORE_URLS=http://+:5256
 
 # Authentication secrets (from secure store)
 Authentication__GitHub__ClientId=your-github-client-id
@@ -1168,7 +1168,7 @@ server {
     ssl_certificate_key /path/to/private.key;
     
     location / {
-        proxy_pass http://joinery-container:8080;
+        proxy_pass http://joinery-container:5256;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
