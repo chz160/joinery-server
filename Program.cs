@@ -48,6 +48,9 @@ builder.Services.AddScoped<ISessionRepository, SessionRepository>();
 builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddHostedService<SessionCleanupService>();
 
+// Add migration service
+builder.Services.AddScoped<IMigrationService, MigrationService>();
+
 // Configure authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
