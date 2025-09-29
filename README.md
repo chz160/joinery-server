@@ -631,7 +631,7 @@ docker build -t joinery-server .
 # Run locally with development settings
 docker run -d \
   --name joinery-server \
-  -p 8080:8080 -p 8081:8081 \
+  -p 8080:8080 \
   -e ASPNETCORE_ENVIRONMENT=Development \
   -e Authentication__GitHub__ClientId="your-dev-client-id" \
   --env-file .env.development \
@@ -639,7 +639,6 @@ docker run -d \
 
 # Access the application
 # HTTP: http://localhost:8080
-# HTTPS: https://localhost:8081
 # Health check: http://localhost:8080/api/health
 # Swagger UI: http://localhost:8080/swagger
 ```
@@ -662,7 +661,6 @@ services:
     image: chz160/joinery-server:latest    # Built from THIS repo's Dockerfile
     ports:
       - "8080:8080"
-      - "8081:8081"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - Authentication__GitHub__ClientId=${GITHUB_CLIENT_ID}
@@ -1111,15 +1109,17 @@ The application is optimized for containerized deployments with the following fe
 #### Docker Image Configuration
 - **Base Image**: `mcr.microsoft.com/dotnet/aspnet:8.0-jammy`
 - **Non-root User**: Runs as `joinery` user for enhanced security
-- **Ports**: HTTP on 8080, HTTPS on 8081
+- **Ports**: HTTP on 8080 (SSL termination handled by reverse proxy)
 - **Health Check**: Built-in monitoring of `/api/health` endpoint
 - **Multi-platform**: Supports both amd64 and arm64 architectures
+
+> **SSL/TLS Configuration**: The container runs HTTP only. In production, SSL termination should be handled by a reverse proxy (nginx, traefik, cloud load balancer, etc.) or container orchestration platform.
 
 #### Docker Environment Variables
 ```bash
 # Required environment variables for Docker deployment
 ASPNETCORE_ENVIRONMENT=Production
-ASPNETCORE_URLS=http://+:8080;https://+:8081
+ASPNETCORE_URLS=http://+:8080
 
 # Authentication secrets (from secure store)
 Authentication__GitHub__ClientId=your-github-client-id
@@ -1141,6 +1141,41 @@ JWT__ExpirationHours=24
 - Health checks for container orchestration
 - Multi-stage build for optimized image size
 - Automated security scanning in CI/CD pipeline
+
+#### SSL/TLS Termination in Production
+
+> **Important**: The Docker container serves HTTP only. SSL/TLS should be terminated at the reverse proxy layer for security and performance benefits.
+
+**Recommended SSL Termination Architecture:**
+
+```
+Internet → Load Balancer/Reverse Proxy (SSL Termination) → Container (HTTP)
+```
+
+**Common SSL Termination Solutions:**
+- **Cloud Load Balancers**: AWS ALB, Azure App Gateway, GCP Load Balancer
+- **Reverse Proxies**: nginx, traefik, Apache HTTP Server
+- **Container Orchestration**: Kubernetes Ingress, Docker Swarm routing mesh
+- **CDN Services**: CloudFlare, AWS CloudFront, Azure CDN
+
+**Example nginx SSL termination config:**
+```nginx
+server {
+    listen 443 ssl;
+    server_name your-domain.com;
+    
+    ssl_certificate /path/to/certificate.crt;
+    ssl_certificate_key /path/to/private.key;
+    
+    location / {
+        proxy_pass http://joinery-container:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
 
 ### Security Warnings
 
