@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 env:
-  # Use docker.io for Docker Hub
+  # Default to Docker Hub (overridden by registry selection logic)
   REGISTRY: docker.io
   IMAGE_NAME: chz160/joinery-server
 
@@ -24,35 +24,83 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
+    - name: Determine Docker Registry
+      id: registry
+      run: |
+        echo "🔍 Determining Docker registry based on available secrets..."
+        
+        if [[ -n "${{ secrets.DOCKER_REGISTRY_URL }}" ]]; then
+          echo "✅ On-premises registry detected: ${{ secrets.DOCKER_REGISTRY_URL }}"
+          echo "registry=${{ secrets.DOCKER_REGISTRY_URL }}" >> $GITHUB_OUTPUT
+          echo "image_name=${{ secrets.DOCKER_REGISTRY_URL }}/joinery-server" >> $GITHUB_OUTPUT
+          echo "registry_type=on-prem" >> $GITHUB_OUTPUT
+        elif [[ -n "${{ secrets.DOCKER_HUB_USERNAME }}" && -n "${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}" ]]; then
+          echo "✅ Docker Hub registry detected with credentials"
+          echo "registry=docker.io" >> $GITHUB_OUTPUT
+          echo "image_name=${{ env.IMAGE_NAME }}" >> $GITHUB_OUTPUT
+          echo "registry_type=docker-hub" >> $GITHUB_OUTPUT
+        else
+          echo "❌ No registry credentials found!"
+          echo "registry=none" >> $GITHUB_OUTPUT
+          echo "image_name=${{ env.IMAGE_NAME }}" >> $GITHUB_OUTPUT
+          echo "registry_type=none" >> $GITHUB_OUTPUT
+        fi
+        
+        echo "📝 Registry selection complete:"
+        echo "  - Registry: $(cat $GITHUB_OUTPUT | grep '^registry=' | cut -d'=' -f2)"
+        echo "  - Image name: $(cat $GITHUB_OUTPUT | grep '^image_name=' | cut -d'=' -f2)"
+        echo "  - Type: $(cat $GITHUB_OUTPUT | grep '^registry_type=' | cut -d'=' -f2)"
+
     - name: Log into Docker Hub
-      if: github.event_name != 'pull_request'
+      if: steps.registry.outputs.registry_type == 'docker-hub' && github.event_name != 'pull_request'
       uses: docker/login-action@v3
       with:
-        registry: ${{ env.REGISTRY }}
+        registry: docker.io
         username: ${{ secrets.DOCKER_HUB_USERNAME }}
         password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
 
+    - name: Log into On-Prem Registry
+      if: steps.registry.outputs.registry_type == 'on-prem' && github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ secrets.DOCKER_REGISTRY_URL }}
+        username: ${{ secrets.DOCKER_REGISTRY_USERNAME }}
+        password: ${{ secrets.DOCKER_REGISTRY_PASSWORD }}
+
+    - name: Skip Build (No Registry Credentials)
+      if: steps.registry.outputs.registry_type == 'none' && github.event_name != 'pull_request'
+      run: |
+        echo "⚠️  Skipping Docker build and push - no registry credentials configured"
+        echo "Please configure one of the following secret sets:"
+        echo "  Docker Hub: DOCKER_HUB_USERNAME, DOCKER_HUB_ACCESS_TOKEN"
+        echo "  On-Prem: DOCKER_REGISTRY_URL, DOCKER_REGISTRY_USERNAME, DOCKER_REGISTRY_PASSWORD"
+        exit 0
+
     - name: Extract metadata (tags, labels)
       id: meta
+      if: steps.registry.outputs.registry_type != 'none'
       uses: docker/metadata-action@v5
       with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        images: ${{ steps.registry.outputs.image_name }}
         tags: |
           # set latest tag for main branch
           type=raw,value=latest,enable={{is_default_branch}}
-          # use commit SHA for unique versioning
+          # use commit SHA for unique versioning  
           type=sha,prefix={{branch}}-
+          # also tag with just the commit SHA
+          type=sha,format=long
           # set tag for branch name (sanitized)
           type=ref,event=branch
           # set tag for pull request
           type=ref,event=pr
 
     - name: Build and push Docker image
+      if: steps.registry.outputs.registry_type != 'none'
       uses: docker/build-push-action@v5
       with:
         context: .
         platforms: linux/amd64,linux/arm64
-        # Only push if this is not a pull request
+        # Only push if this is not a pull request and registry is configured
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
@@ -60,5 +108,9 @@ jobs:
         cache-to: type=gha,mode=max
 
     - name: Image digest
-      if: github.event_name != 'pull_request'
-      run: echo ${{ steps.build.outputs.digest }}
+      if: github.event_name != 'pull_request' && steps.registry.outputs.registry_type != 'none'
+      run: |
+        echo "🐳 Docker image built and pushed successfully!"
+        echo "📍 Registry: ${{ steps.registry.outputs.registry }}"
+        echo "🏷️  Image: ${{ steps.registry.outputs.image_name }}"
+        echo "🔖 Tags: ${{ steps.meta.outputs.tags }}"
