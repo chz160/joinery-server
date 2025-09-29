@@ -2,7 +2,6 @@
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-jammy AS base
 WORKDIR /app
 EXPOSE 8080
-EXPOSE 8081
 
 # Install curl for health check and create non-root user
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/* \
@@ -35,7 +34,7 @@ RUN chown -R joinery:joinery /app
 USER joinery
 
 # Set environment variables
-ENV ASPNETCORE_URLS=http://+:8080;https://+:8081
+ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 # Add health check
