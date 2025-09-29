@@ -719,27 +719,58 @@ The relationship between this repository and the infrastructure repository follo
 
 #### CI Pipeline Implementation
 
-This repository includes automated Docker image building and publishing via GitHub Actions.
+This repository includes automated Docker image building and publishing via GitHub Actions with conditional registry selection.
 
 **Workflow**: `.github/workflows/docker-publish.yml`
 - **Triggers**: Push to `main` branch, pull requests
 - **Images**: Multi-platform builds (linux/amd64, linux/arm64)
-- **Registry**: Docker Hub (`chz160/joinery-server`)
-- **Tags**: `latest` for main branch, commit SHA, branch names
+- **Registry**: Docker Hub or On-Premises registry (based on available secrets)
+- **Tags**: `latest` for main branch, commit SHA (short and long), branch names
 
-**Required GitHub Secrets**:
-Set these in repository Settings > Secrets and variables > Actions:
+#### Registry Selection Logic
 
-| Secret Name | Description | Example |
-|-------------|-------------|---------|
-| `DOCKER_HUB_USERNAME` | Docker Hub username | `chz160` |
-| `DOCKER_HUB_ACCESS_TOKEN` | Docker Hub access token | `dckr_pat_...` |
+The workflow automatically selects the appropriate Docker registry based on available GitHub secrets:
 
-**Setup Instructions**:
+1. **On-Premises Registry** (Priority 1): If `DOCKER_REGISTRY_URL` is configured
+2. **Docker Hub** (Priority 2): If `DOCKER_HUB_USERNAME` and `DOCKER_HUB_ACCESS_TOKEN` are configured
+3. **Skip Build**: If no registry credentials are found
+
+**Docker Hub Configuration**:
+Set these secrets in repository Settings > Secrets and variables > Actions:
+
+| Secret Name | Description | Required | Example |
+|-------------|-------------|----------|---------|
+| `DOCKER_HUB_USERNAME` | Docker Hub username | Yes | `chz160` |
+| `DOCKER_HUB_ACCESS_TOKEN` | Docker Hub access token | Yes | `dckr_pat_...` |
+
+**On-Premises Registry Configuration**:
+Set these secrets for on-premises registry (takes priority over Docker Hub):
+
+| Secret Name | Description | Required | Example |
+|-------------|-------------|----------|---------|
+| `DOCKER_REGISTRY_URL` | Registry URL (without protocol) | Yes | `registry.company.com` |
+| `DOCKER_REGISTRY_USERNAME` | Registry username | Yes | `ci-user` |
+| `DOCKER_REGISTRY_PASSWORD` | Registry password or token | Yes | `secure-password` |
+
+#### Setup Instructions
+
+**For Docker Hub**:
 1. Go to [Docker Hub](https://hub.docker.com/) > Account Settings > Security
 2. Create new access token with "Read, Write, Delete" permissions
+3. Add `DOCKER_HUB_USERNAME` and `DOCKER_HUB_ACCESS_TOKEN` secrets to GitHub repository
+
+**For On-Premises Registry**:
+1. Obtain registry credentials from your administrator
+2. Add `DOCKER_REGISTRY_URL`, `DOCKER_REGISTRY_USERNAME`, and `DOCKER_REGISTRY_PASSWORD` secrets to GitHub repository
+3. Ensure the registry supports multi-platform builds (linux/amd64, linux/arm64)
+
+**Registry Selection Logging**:
+The workflow logs clearly indicate which registry is selected during each run:
+- ✅ Docker Hub registry detected with credentials
+- ✅ On-premises registry detected: registry.company.com
+- ❌ No registry credentials found!
 3. Add secrets to GitHub repository settings
-4. Push to main branch triggers automatic image build and publish
+4. Push to main branch triggers automatic image build and publish to the selected registry
 
 ```yaml
 # In joinery-infra/.github/workflows/deploy.yml  
