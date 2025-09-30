@@ -631,7 +631,7 @@ docker build -t joinery-server .
 # Run locally with development settings
 docker run -d \
   --name joinery-server \
-  -p 5256:5256 \
+  -p 5256:8080 \
   -e ASPNETCORE_ENVIRONMENT=Development \
   -e Authentication__GitHub__ClientId="your-dev-client-id" \
   --env-file .env.development \
@@ -660,7 +660,7 @@ services:
   api:
     image: chz160/joinery-server:latest    # Built from THIS repo's Dockerfile
     ports:
-      - "5256:5256"
+      - "5256:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - Authentication__GitHub__ClientId=${GITHUB_CLIENT_ID}
@@ -685,7 +685,7 @@ services:
     ports:
       - "3000:80"
     environment:
-      - REACT_APP_API_URL=http://api:5256
+      - REACT_APP_API_URL=http://api:8080
     depends_on:
       - api
     networks:
@@ -1109,7 +1109,7 @@ The application is optimized for containerized deployments with the following fe
 #### Docker Image Configuration
 - **Base Image**: `mcr.microsoft.com/dotnet/aspnet:8.0-jammy`
 - **Non-root User**: Runs as `joinery` user for enhanced security
-- **Ports**: HTTP on 5256 (SSL termination handled by reverse proxy)
+- **Ports**: HTTP on 8080 (follows Docker standard port convention)
 - **Health Check**: Built-in monitoring of `/api/health` endpoint
 - **Multi-platform**: Supports both amd64 and arm64 architectures
 
@@ -1119,7 +1119,7 @@ The application is optimized for containerized deployments with the following fe
 ```bash
 # Required environment variables for Docker deployment
 ASPNETCORE_ENVIRONMENT=Production
-ASPNETCORE_URLS=http://+:5256
+HTTP_PORTS=8080
 
 # Authentication secrets (from secure store)
 Authentication__GitHub__ClientId=your-github-client-id
@@ -1168,7 +1168,7 @@ server {
     ssl_certificate_key /path/to/private.key;
     
     location / {
-        proxy_pass http://joinery-container:5256;
+        proxy_pass http://joinery-container:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
