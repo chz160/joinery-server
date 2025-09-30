@@ -1,7 +1,7 @@
 # Dockerfile for production
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-jammy AS base
 WORKDIR /app
-EXPOSE 8080
+EXPOSE 5256
 
 # Install curl for health check and create non-root user
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/* \
@@ -35,11 +35,11 @@ USER joinery
 
 # Set environment variables  
 # Use HTTP_PORTS for modern Docker compatibility (ASP.NET Core 8.0+)
-ENV HTTP_PORTS=8080
+ENV HTTP_PORTS=5256
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 # Add health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8080/api/health || exit 1
+  CMD curl -f http://localhost:5256/api/health || exit 1
 
 ENTRYPOINT ["dotnet", "JoineryServer.dll"]
